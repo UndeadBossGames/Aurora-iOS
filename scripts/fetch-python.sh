@@ -15,8 +15,10 @@ mv "$XC" build-py/Python.xcframework
 echo "Python.xcframework:"; ls build-py/Python.xcframework build-py/Python.xcframework/build
 
 # packages (pure Python only; compiled extras are optional for yt-dlp and are removed)
-python3 -m pip install --quiet --upgrade pip
-python3 -m pip install --quiet --target build-py/pkgs-all "yt-dlp[default]" yt-dlp-apple-webkit-jsi
+# (Homebrew's Python is "externally managed", so use a throwaway virtual environment)
+python3 -m venv build-py/venv
+build-py/venv/bin/python -m pip install --quiet --upgrade pip
+build-py/venv/bin/python -m pip install --quiet --target build-py/pkgs-all "yt-dlp[default]" yt-dlp-apple-webkit-jsi
 mkdir -p build-py/app_packages
 for p in yt_dlp yt_dlp_ejs yt_dlp_plugins certifi mutagen; do
   if [ -e "build-py/pkgs-all/$p" ]; then cp -R "build-py/pkgs-all/$p" build-py/app_packages/; else echo "warning: $p not installed"; fi
