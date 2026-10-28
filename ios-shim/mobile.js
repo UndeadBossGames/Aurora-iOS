@@ -40,7 +40,7 @@
     ['me', null, 'You'],
   ];
   function syncTabs(view) {
-    const tab = body.classList.contains('show-lib') ? 'library' : view === 'search' ? 'search' : view === 'together' ? 'together' : view === 'profile' || view === 'store' || view === 'friends' || view === 'settings' ? 'me' : view === 'home' ? 'home' : '';
+    const tab = body.classList.contains('show-lib') ? 'library' : view === 'search' ? 'search' : view === 'together' ? 'together' : view === 'profile' || view === 'store' || view === 'friends' || view === 'friendlib' || view === 'settings' ? 'me' : view === 'home' ? 'home' : '';
     document.querySelectorAll('.m-tab').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
   }
   function avatar() {
