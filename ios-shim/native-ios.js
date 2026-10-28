@@ -113,6 +113,7 @@
     for (const f of r.files || []) {
       const name = typeof f === 'string' ? f : f.name;
       if (!name || name.startsWith('.') || name === DATA_DIR || name === COVER_DIR) continue;
+      if (/\.(video|audio)\.[a-z0-9]+$|\.part$|\.ytdl$|\.f\d+\.[a-z0-9]+$|\.temp\.[a-z0-9]+$/i.test(name)) continue;
       const p = path ? `${path}/${name}` : name;
       if (f.type === 'directory') await walk(directory, p, out, depth + 1);
       else if (MEDIA_EXT.includes(ext(name))) out.push(p);
@@ -151,7 +152,6 @@
   const IOS_REPO = 'UndeadBossGames/Aurora-iOS';
   const version = window.AURORA_IOS_VERSION || '1.0.0';
   const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) > (y[i] || 0)) return true; if ((x[i] || 0) < (y[i] || 0)) return false; } return false; };
-  const NO_DL = "Downloading from links isn't available on iPhone. Download it with Aurora on your PC, then copy it over with iTunes File Sharing or the Files app.";
   const artCache = {};
 
   const native = {
@@ -276,15 +276,9 @@
       state: async () => ({ ready: null, info: null, downloading: false }),
       onProgress: noop,
     },
-    dl: {
-      add: async () => err(NO_DL),
-      search: async () => err(NO_DL),
-      list: async () => [],
-      cancel: async () => {}, retry: async () => {}, remove: async () => {}, clear: async () => {},
-      tools: async () => ({ ytdlp: null, ffmpeg: null, unsupported: true }),
-      updateYtdlp: async () => err(NO_DL), installFfmpeg: async () => err(NO_DL),
-      onJob: noop, onFile: noop, onRemoved: noop, onCleared: noop, onTools: noop,
-    },
+    // dl: the real downloader is added by ios/downloader-ios.js
+    dl: null,
+    _trackId: (p) => hashId(p),
   };
 
   native.ready = (async () => {
