@@ -1,9 +1,10 @@
 // Aurora for iPhone: phone layout on top of the shared desktop UI.
 // Adds a bottom tab bar, a mini player that opens into a full-screen player, a full-screen Library,
-// and hides things an iPhone can't do (link downloads, Discord).
+// iOS gestures (edge swipe back, long press, swipes on the player), haptics, keyboard handling,
+// action-sheet menus, and "aurora://" links so other apps and Shortcuts can send links to download.
 (function () {
   const body = document.body;
-  const IOS_HIDDEN_VIEWS = ['downloader', 'discover', 'discord'];
+  const IOS_HIDDEN_VIEWS = ['discord'];
 
   // 1) wait for the file system before the app starts
   const boot = App.boot;
@@ -17,7 +18,7 @@
   const go = App.go;
   App.go = (view, ...rest) => {
     if (IOS_HIDDEN_VIEWS.includes(view)) {
-      UI.toast(view === 'discord' ? 'Discord Connection works in Aurora for PC.' : "Link downloads work in Aurora for PC. Copy songs to your iPhone with iTunes File Sharing or the Files app.", 4500);
+      UI.toast('Discord Connection works in Aurora for PC.', 4500);
       view = 'home'; rest = [];
     }
     closeSheets();
@@ -127,6 +128,8 @@
   function importMenu(btn) {
     const r = btn.getBoundingClientRect();
     UI.menu([
+      { label: 'Download from a link…', icon: 'link', action: () => App.go('downloader') },
+      { label: 'Search YouTube or SoundCloud', icon: 'search', action: () => App.go('discover') },
       { label: 'Choose from Files…', icon: 'folder', action: () => App.importFiles() },
       { label: 'Check for new files', icon: 'refresh', action: async () => { await App.rescanFolders(); UI.toast('Library updated'); } },
       { divider: true },
@@ -137,7 +140,8 @@
     UI.modal({
       title: 'Get music onto your iPhone',
       body: `<div class="m-help">
-        <p><b>From Aurora on your PC</b> (easiest): plug in your iPhone, open <b>iTunes</b> → the phone icon → <b>File Sharing</b> → <b>Aurora</b>, then drag songs from your Aurora downloads folder into the list.</p>
+        <p><b>Download it right here</b>: paste a YouTube, SoundCloud, Spotify or any other link in the <b>Video Downloader</b>, or search in <b>Discover</b>. Whole playlists download several songs at once.</p>
+        <p><b>From Aurora on your PC</b>: plug in your iPhone, open <b>iTunes</b> → the phone icon → <b>File Sharing</b> → <b>Aurora</b>, then drag songs from your Aurora downloads folder into the list.</p>
         <p><b>From the Files app</b>: tap <b>Add music → Choose from Files</b> and pick songs from iCloud Drive, On My iPhone or any other location.</p>
         <p>Anything inside <b>Files → On My iPhone → Aurora</b> is added to your library automatically when Aurora opens.</p>
       </div>`,
@@ -154,6 +158,106 @@
     });
   }
 
+  // 7) iOS feel: haptics, long press, edge swipe back, player swipes, keyboard, action sheets
+  const haptic = (s) => native.haptic && native.haptic(s);
+  function wireTouch() {
+    // light haptic tick on the main controls
+    document.addEventListener('click', (e) => {
+      const t = e.target.closest('.m-tab, .play-btn, #m-miniplay, .pb-like, .tl-like, .fl-btn, #dl-go, .dv-dl, .fab, .lt-react, .seg button, .chip');
+      if (t) haptic(t.matches('.pb-like, .tl-like') ? 'medium' : 'light');
+    }, true);
+
+    // long press = right click (song menus, library items, cards)
+    let lp = null;
+    document.addEventListener('touchstart', (e) => {
+      const el = e.target.closest('.tl-row, .lib-item, .card, .fl-row, .dl-row, .pb-track');
+      if (!el || e.touches.length > 1) return;
+      const t = e.touches[0];
+      lp = { el, x: t.clientX, y: t.clientY, timer: setTimeout(() => {
+        haptic('medium');
+        lp.fired = true;
+        el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: lp.x, clientY: lp.y }));
+      }, 480) };
+    }, { passive: true });
+    const cancelLp = (e) => {
+      if (!lp) return;
+      if (e && e.type === 'touchmove') { const t = e.touches[0]; if (Math.hypot(t.clientX - lp.x, t.clientY - lp.y) < 10) return; }
+      clearTimeout(lp.timer);
+      if (lp.fired && e && e.type === 'touchend') { e.preventDefault(); }
+      lp = null;
+    };
+    document.addEventListener('touchmove', cancelLp, { passive: true });
+    document.addEventListener('touchend', cancelLp, { passive: false });
+    document.addEventListener('touchcancel', cancelLp, { passive: true });
+
+    // swipe from the left edge = back
+    let edge = null;
+    document.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      edge = t.clientX < 22 && !body.classList.contains('np-open') && !document.querySelector('.modal-backdrop') ? { x: t.clientX, y: t.clientY } : null;
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      if (!edge) return;
+      const t = e.changedTouches[0];
+      if (t.clientX - edge.x > 80 && Math.abs(t.clientY - edge.y) < 60) {
+        haptic('select');
+        if (body.classList.contains('show-lib')) { body.classList.remove('show-lib'); syncTabs(App.current && App.current.view); } else App.back();
+      }
+      edge = null;
+    }, { passive: true });
+
+    // mini player: swipe up opens, swipe left/right skips
+    const pb = document.getElementById('playerbar');
+    let ps = null;
+    pb.addEventListener('touchstart', (e) => { if (!body.classList.contains('np-open') && !e.target.closest('button')) { const t = e.touches[0]; ps = { x: t.clientX, y: t.clientY }; } }, { passive: true });
+    pb.addEventListener('touchend', (e) => {
+      if (!ps) return;
+      const t = e.changedTouches[0], dx = t.clientX - ps.x, dy = t.clientY - ps.y;
+      ps = null;
+      if (dy < -40 && Math.abs(dx) < 60 && Player.current) { body.classList.add('np-open'); haptic('light'); }
+      else if (Math.abs(dx) > 60 && Math.abs(dy) < 40) { haptic('select'); dx < 0 ? Player.next() : Player.prev(); }
+    }, { passive: true });
+    // full player: swipe left/right on the artwork skips
+    let as = null;
+    pb.addEventListener('touchstart', (e) => { if (body.classList.contains('np-open') && e.target.closest('.pb-cover')) { const t = e.touches[0]; as = { x: t.clientX, y: t.clientY }; } }, { passive: true });
+    pb.addEventListener('touchend', (e) => {
+      if (!as) return;
+      const t = e.changedTouches[0], dx = t.clientX - as.x, dy = t.clientY - as.y;
+      as = null;
+      if (Math.abs(dx) > 60 && Math.abs(dy) < 50) { haptic('select'); dx < 0 ? Player.next() : Player.prev(); }
+    }, { passive: true });
+
+    // keyboard open: hide the tab bar and mini player so they don't ride on top of it
+    const vv = window.visualViewport;
+    if (vv) {
+      const kb = () => body.classList.toggle('kb-open', window.innerHeight - vv.height > 140);
+      vv.addEventListener('resize', kb);
+      kb();
+    }
+    // Return closes the keyboard on search fields
+    document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input[type=search], #search-input, .fl-search input')) e.target.blur(); });
+
+    // menus become iOS-style action sheets (see mobile.css); dim the page behind them
+    new MutationObserver(() => body.classList.toggle('menu-open', !!document.querySelector('body > .ctx-menu'))).observe(body, { childList: true });
+  }
+
+  // 8) aurora://download?url=… (from Shortcuts or the share sheet) and pasting links
+  function openLink(raw) {
+    try {
+      const u = new URL(raw);
+      const target = u.searchParams.get('url') || u.searchParams.get('u') || decodeURIComponent(u.pathname.replace(/^\/+/, ''));
+      if (/^https?:\/\//i.test(target)) { App.go('downloader', target); UI.toast('Link ready. Pick a format and tap Download.'); }
+      else if (u.host === 'together' && target) { try { ListenTogether.join(target); App.go('together'); } catch (e) { UI.toast(e.message); } }
+    } catch {}
+  }
+  function wireLinks() {
+    const AppPlugin = (window.Capacitor && window.Capacitor.Plugins || {}).App;
+    if (AppPlugin && AppPlugin.addListener) {
+      AppPlugin.addListener('appUrlOpen', (d) => d && d.url && openLink(d.url));
+      if (AppPlugin.getLaunchUrl) AppPlugin.getLaunchUrl().then((d) => d && d.url && openLink(d.url)).catch(() => {});
+    }
+  }
+
   function setup() {
     // the Library is always full width on a phone
     const app = document.getElementById('app');
@@ -164,6 +268,8 @@
     wirePlayer();
     wireLibrary();
     wireResume();
+    wireTouch();
+    wireLinks();
     State.on('profile', renderTabs);
     State.on('profiles', renderTabs);
     // close the full-screen player / library when a modal or menu opens from them

@@ -53,9 +53,8 @@ body.mobile .tl-dur { gap: 6px; margin-right: 0 !important; }
 body.mobile .tl-like { display: none; }
 
 /* things an iPhone can't do */
-body.is-ios .hub-tile[data-v="discover"], body.is-ios .hub-tile[data-v="downloader"], body.is-ios .hub-tile[data-v="discord"],
-body.is-ios .dl-more, body.is-ios .dl-open-folder, body.is-ios .home-discover, body.is-ios .hd-search,
-body.is-ios .browse-tile[data-go="discover"], body.is-ios .browse-tile[data-go="discord"], body.is-ios .browse-tile[data-go="downloader"],
+body.is-ios .hub-tile[data-v="discord"], body.is-ios .browse-tile[data-go="discord"],
+body.is-ios .dl-open-folder, body.is-ios .dl-folder,
 body.is-ios #btn-device, body.is-ios #btn-mini, body.is-ios #btn-fullscreen, body.is-ios .np-folder { display: none !important; }
 
 /* ---------- bottom tab bar ---------- */
@@ -218,3 +217,62 @@ body.mobile .fl-row { grid-template-columns: 44px minmax(0, 1fr) auto !important
 body.mobile .fl-row .tl-cover { width: 44px; height: 44px; }
 body.mobile .fl-btn { height: 34px; padding: 0 12px; }
 body.mobile .fr-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------- iOS polish (v1.2) ---------- */
+html { touch-action: manipulation; }
+body.mobile .scroll, body.mobile .main-scroll { overscroll-behavior: contain; }
+body.mobile button, body.mobile .lib-item, body.mobile .tl-row, body.mobile .card { -webkit-user-select: none; user-select: none; }
+body.mobile button:active, body.mobile .lib-item:active, body.mobile .card:active, body.mobile .tl-row:active, body.mobile .fl-row:active { transform: scale(.97); transition: transform .08s; }
+body.mobile .tl-row:active, body.mobile .fl-row:active { transform: none; background: rgba(255,255,255,.08); }
+@media (hover: none) {
+  body.mobile .card:hover, body.mobile .tl-row:hover, body.mobile .lib-item:hover { background: inherit; }
+  body.mobile .card:hover .fab { opacity: 0; transform: translateY(8px); }
+}
+
+/* keyboard open: get the tab bar and mini player out of the way */
+body.mobile.kb-open .m-tabs, body.mobile.kb-open .playerbar { display: none !important; }
+body.mobile.kb-open .app { padding-bottom: 0 !important; }
+
+/* menus are action sheets */
+body.mobile .ctx-menu {
+  position: fixed !important; left: 8px !important; right: 8px !important; top: auto !important;
+  bottom: calc(var(--sa-bottom) + 8px) !important; min-width: 0 !important; width: auto !important; max-width: none !important;
+  max-height: 72dvh; overflow-y: auto; border-radius: 20px !important; padding: 8px !important; z-index: 1001 !important;
+  background: rgba(32, 30, 48, .98) !important; box-shadow: 0 -10px 40px rgba(0,0,0,.5) !important;
+  animation: m-sheet .22s cubic-bezier(.2, .8, .2, 1);
+}
+body.mobile .ctx-menu.sub { z-index: 1002 !important; }
+body.mobile .ctx-menu .menu-item { min-height: 50px; font-size: 16px; border-radius: 12px; padding: 0 14px; }
+body.mobile .ctx-menu .menu-header { font-size: 13px; padding: 8px 14px; }
+body.mobile.menu-open::after { content: ''; position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: 1000; animation: m-fade .2s ease; }
+@keyframes m-sheet { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Video Downloader and Discover on a phone */
+body.mobile .dl-header, body.mobile .dv-header { flex-direction: column; align-items: flex-start !important; gap: 10px; }
+body.mobile .dl-hero-icon svg { width: 64px; height: 64px; }
+body.mobile .dl-input-row { flex-direction: column; align-items: stretch !important; gap: 10px; }
+body.mobile .dl-input { width: 100%; }
+body.mobile .dl-input input { font-size: 16px; }
+body.mobile .dl-select, body.mobile .dl-select select { width: 100%; }
+body.mobile #dl-go { width: 100%; height: 50px; }
+body.mobile .dl-options { flex-direction: column; align-items: flex-start !important; gap: 12px; }
+body.mobile .dl-sources { display: none; }
+body.mobile .dl-row { grid-template-columns: 64px minmax(0, 1fr) auto !important; gap: 10px; }
+body.mobile .dl-thumb, body.mobile .dl-thumb.wide { width: 64px !important; height: 48px !important; }
+body.mobile .dl-meta { flex-wrap: wrap; row-gap: 4px; }
+body.mobile .dl-actions .icon-btn { width: 40px; height: 40px; }
+body.mobile .dl-tools .tool { flex-wrap: wrap; }
+body.mobile .dv-results, body.mobile .dv-grid { grid-template-columns: 1fr !important; }
+body.mobile .dv-search, body.mobile .dv-bar { flex-direction: column; align-items: stretch !important; gap: 10px; }
+body.mobile .dv-search input { font-size: 16px; }
+body.mobile .dv-preview iframe { width: 100% !important; height: auto !important; aspect-ratio: 16 / 9; }
+body.mobile .dl-input { flex: none !important; height: 52px; width: 100%; }
+body.mobile .dl-hero-icon, body.mobile .fr-hero { width: 96px !important; height: 96px !important; }
+body.mobile .dl-hero-icon svg, body.mobile .fr-hero svg { width: 52px; height: 52px; }
+body.mobile .coll-header { flex-direction: column; align-items: center !important; text-align: center; gap: 14px; padding: 18px 0 16px; min-height: 0; }
+body.mobile .coll-cover, body.mobile .coll-cover-wrap .coll-cover { width: 200px !important; height: 200px !important; }
+body.mobile .coll-title { font-size: 34px !important; line-height: 1.1; word-break: normal; overflow-wrap: anywhere; }
+body.mobile .coll-meta { align-items: center; width: 100%; }
+body.mobile .coll-desc { font-size: 14px; }
+body.mobile .action-bar { flex-wrap: wrap; gap: 10px; }
+body.mobile .ctx-menu.sub { box-shadow: 0 -24px 80px rgba(0,0,0,.85) !important; bottom: calc(var(--sa-bottom) + 20px) !important; left: 16px !important; right: 16px !important; }
