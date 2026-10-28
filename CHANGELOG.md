@@ -2,6 +2,9 @@
 
 Every version is a git tag. To get an older build, download its .ipa from Releases.
 
+## v1.0.1 — 2026-10-28
+- "Choose from Files" no longer filters by file type, so every song in the Files app can be picked (non-media files are skipped)
+
 ## v1.0.0 — 2026-10-28
 First release of Aurora for iPhone.
 - Aurora's UI in a phone layout: bottom tabs (Home, Search, Library, Together, You), a mini player, a full-screen Now Playing view with swipe-down to close, and phone-sized menus and windows
