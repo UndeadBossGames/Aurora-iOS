@@ -38,6 +38,7 @@ jobs:
           pod --version
           npx cap add ios
           bash scripts/patch-ios.sh
+          ruby -e "require 'xcodeproj'" 2>/dev/null || sudo gem install xcodeproj --no-document
           ruby scripts/add-native.rb ios/App
           npx cap sync ios
 

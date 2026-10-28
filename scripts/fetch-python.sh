@@ -12,7 +12,7 @@ tar -xzf build-py/py.tgz -C build-py/support
 XC=$(find build-py/support -maxdepth 3 -name 'Python.xcframework' -type d | head -1)
 [ -n "$XC" ] || { echo "Python.xcframework not found in ${PY_ASSET}" >&2; find build-py/support -maxdepth 3 >&2; exit 1; }
 mv "$XC" build-py/Python.xcframework
-echo "Python.xcframework:"; ls build-py/Python.xcframework build-py/Python.xcframework/build
+echo "Python.xcframework:"; ls build-py/Python.xcframework; ls build-py/Python.xcframework/build || true
 
 # packages (pure Python only; compiled extras are optional for yt-dlp and are removed)
 # (Homebrew's Python is "externally managed", so use a throwaway virtual environment)
