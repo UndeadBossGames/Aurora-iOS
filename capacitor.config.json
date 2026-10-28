@@ -1,0 +1,16 @@
+{
+  "appId": "com.undeadbossgames.aurora",
+  "appName": "Aurora",
+  "webDir": "www",
+  "backgroundColor": "#0b0b14",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0b0b14",
+    "scrollEnabled": false,
+    "allowsLinkPreview": false,
+    "preferredContentMode": "mobile"
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": false }
+  }
+}

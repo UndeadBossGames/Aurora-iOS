@@ -1,0 +1,27 @@
+{
+  "name": "aurora-ios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aurora for iPhone: the Aurora music player, built with Capacitor for sideloading (not the App Store).",
+  "license": "MIT",
+  "scripts": {
+    "sync-desktop": "bash scripts/sync-desktop.sh",
+    "build:www": "node scripts/build-www.js",
+    "ios:add": "npx cap add ios --packagemanager SPM",
+    "ios:sync": "node scripts/build-www.js && npx cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.4.0",
+    "@capacitor/ios": "^7.4.0",
+    "@capacitor/filesystem": "^7.1.0",
+    "@capawesome/capacitor-file-picker": "^7.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.0"
+  },
+  "aurora": {
+    "bundleId": "com.undeadbossgames.aurora",
+    "desktopRepo": "UndeadBossGames/Aurora",
+    "minIOS": "15.0"
+  }
+}
