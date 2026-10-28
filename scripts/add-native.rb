@@ -44,7 +44,7 @@ end
 #    It must run after resources are copied and before frameworks are embedded.
 phase = target.shell_script_build_phases.find { |p| p.name == 'Process Python libraries' } || target.new_shell_script_build_phase('Process Python libraries')
 phase.shell_path = '/bin/sh'
-phase.always_out_of_date = '1'
+phase.always_out_of_date = '1' if phase.respond_to?(:always_out_of_date=)
 phase.shell_script = <<~SH
   set -e
   # unsigned CI builds have no identity: sign ad-hoc; Sideloadly re-signs everything later

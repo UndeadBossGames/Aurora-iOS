@@ -5,7 +5,7 @@ import Capacitor
 import WebKit
 
 class AuroraViewController: CAPBridgeViewController {
-    override open func capacitorDidLoad() {
+    override func capacitorDidLoad() {
         bridge?.registerPluginInstance(AuroraDLPlugin())
     }
 
@@ -22,7 +22,6 @@ class AuroraViewController: CAPBridgeViewController {
             if #available(iOS 16.4, *) { wv.isInspectable = true }
         }
         overrideUserInterfaceStyle = .dark
+        setStatusBarStyle(.lightContent)
     }
-
-    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 }

@@ -117,6 +117,8 @@ def _base_opts(logger):
         'continuedl': True,
         # fetch YouTube's challenge-solver scripts from GitHub if the bundled ones are stale
         'remote_components': ['ejs:github'],
+        # the app container's home folder isn't writable on iOS; cache in Library/Caches
+        'cachedir': os.path.join(os.path.expanduser('~'), 'Library', 'Caches', 'yt-dlp'),
     }
 
 
