@@ -223,6 +223,21 @@
         await FS.writeFile({ path, directory: LIB, data: m[2], recursive: true });
         return 'lib/' + path;
       },
+      // friend sharing: the bytes of a song to send, and saving one a friend sent
+      async readBytes(p) {
+        const buf = await (await fetch(native.fileUrl(p))).arrayBuffer();
+        if (buf.byteLength > 80 * 1024 * 1024) throw new Error('This file is too large to send (max 80 MB).');
+        return new Uint8Array(buf);
+      },
+      async saveIncoming({ name, bytes }) {
+        const dir = `${MUSIC_DIR}/From friends`;
+        const safe = String(name || 'song').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 150) || 'song';
+        if (!MEDIA_EXT.includes(ext(safe))) throw new Error('Not a music or video file.');
+        await ensureDir(dir, DOCS);
+        const file = await uniqueName(dir, safe);
+        await FS.writeFile({ path: `${dir}/${file}`, directory: DOCS, data: b64(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)) });
+        return readTrack(`docs/${dir}/${file}`);
+      },
       async deleteFile(p) { const s = split(p); if (!s) return false; try { await FS.deleteFile(s); return true; } catch { return false; } },
     },
     shell: {
