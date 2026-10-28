@@ -26,6 +26,28 @@ $PB -c "Delete :UISupportedInterfaceOrientations" "$PLIST" >/dev/null 2>&1 || tr
 $PB -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
 $PB -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
 
+# aurora:// links (Shortcuts / share sheet -> "download this link in Aurora")
+$PB -c "Delete :CFBundleURLTypes" "$PLIST" >/dev/null 2>&1 || true
+$PB -c "Add :CFBundleURLTypes array" "$PLIST"
+$PB -c "Add :CFBundleURLTypes:0 dict" "$PLIST"
+$PB -c "Add :CFBundleURLTypes:0:CFBundleURLName string com.undeadbossgames.aurora" "$PLIST"
+$PB -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PLIST"
+$PB -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string aurora" "$PLIST"
+
+# Aurora's own view controller (registers the native downloader plugin)
+STORY="$APP/Base.lproj/Main.storyboard"
+sed -i '' 's/customClass="CAPBridgeViewController" customModule="Capacitor"/customClass="AuroraViewController" customModule="App" customModuleProvider="target"/' "$STORY"
+grep -q 'customClass="AuroraViewController"' "$STORY" || { echo "patch-ios: could not set AuroraViewController in Main.storyboard" >&2; grep -n customClass "$STORY" >&2; exit 1; }
+
+# native sources, the Python engine and its packages
+cp ios-native/AuroraPython.h ios-native/AuroraPython.m ios-native/AuroraDLPlugin.swift ios-native/AuroraViewController.swift ios-native/App-Bridging-Header.h "$APP/"
+rm -rf "$APP/app" "$APP/app_packages"
+mkdir -p "$APP/app"
+cp ios-native/app/*.py "$APP/app/"
+cp -R build-py/app_packages "$APP/app_packages"
+rm -rf ios/App/Python.xcframework
+cp -R build-py/Python.xcframework ios/App/Python.xcframework
+
 # Background audio needs the "playback" audio session
 DELEGATE="$APP/AppDelegate.swift"
 if ! grep -q AVAudioSession "$DELEGATE"; then

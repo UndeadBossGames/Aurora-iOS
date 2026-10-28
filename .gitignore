@@ -3,3 +3,4 @@ www/
 ios/
 dist/
 .DS_Store
+build-py/
