@@ -1,0 +1,66 @@
+name: Build iPhone app
+
+on:
+  push:
+    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Show Xcode
+        run: xcodebuild -version
+
+      - name: Install Capacitor
+        run: npm install --no-audit --no-fund
+
+      - name: Build the web app
+        run: node scripts/build-www.js
+
+      - name: Create the iOS project
+        run: |
+          npx cap add ios --packagemanager SPM
+          bash scripts/patch-ios.sh
+          npx cap sync ios
+
+      - name: Build Aurora.app (unsigned)
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          cd ios/App
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            MARKETING_VERSION="$VER" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            PRODUCT_BUNDLE_IDENTIFIER=com.undeadbossgames.aurora IPHONEOS_DEPLOYMENT_TARGET=15.0 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tail -40
+          test -d build/Build/Products/Release-iphoneos/App.app
+
+      - name: Package Aurora.ipa
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          mkdir -p dist/Payload
+          cp -R ios/App/build/Build/Products/Release-iphoneos/App.app dist/Payload/Aurora.app
+          cd dist && zip -qry "Aurora-iOS-$VER.ipa" Payload && rm -rf Payload && ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aurora-iOS
+          path: dist/*.ipa
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.ipa
+          generate_release_notes: true
