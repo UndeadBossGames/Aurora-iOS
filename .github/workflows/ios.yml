@@ -15,9 +15,9 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -32,7 +32,8 @@ jobs:
 
       - name: Create the iOS project
         run: |
-          npx cap add ios --packagemanager SPM
+          pod --version
+          npx cap add ios
           bash scripts/patch-ios.sh
           npx cap sync ios
 
@@ -40,12 +41,13 @@ jobs:
         run: |
           VER=$(node -p "require('./package.json').version")
           cd ios/App
-          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
             MARKETING_VERSION="$VER" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            PRODUCT_BUNDLE_IDENTIFIER=com.undeadbossgames.aurora IPHONEOS_DEPLOYMENT_TARGET=15.0 \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build | tail -40
+            build > build.log 2>&1 || { grep -E "error:|fatal error" build.log | head -60; tail -80 build.log; exit 1; }
+          tail -5 build.log
           test -d build/Build/Products/Release-iphoneos/App.app
 
       - name: Package Aurora.ipa

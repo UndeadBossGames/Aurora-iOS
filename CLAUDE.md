@@ -11,4 +11,4 @@
 - `web/` is a copy of the desktop `src/renderer`. Change shared UI in the desktop repo first, then run `bash scripts/sync-desktop.sh ../Aurora` and commit.
 - `ios-shim/native-ios.js` implements `window.native` with Capacitor plugins (Filesystem, FilePicker, CapacitorHttp). Paths are stored relative (`docs/...`, `lib/...`) because the app container moves on reinstall.
 - `ios-shim/mobile.css` + `mobile.js`: phone layout. Desktop features iOS can't support (yt-dlp downloads, Discord IPC) are hidden here.
-- `ios/` is generated in CI (`npx cap add ios --packagemanager SPM` + `scripts/patch-ios.sh`); it is not committed.
+- `ios/` is generated in CI (`npx cap add ios` + `scripts/patch-ios.sh`); it is not committed.
