@@ -12,6 +12,7 @@ Aurora, the music player, on your iPhone. Same look, same profiles, same Store t
 | **Transfer songs** | Copy or move downloaded songs from one profile to another, or share them with every profile (You → your profile → Transfer songs). |
 | **Get music on** | iTunes File Sharing from your PC, the Files app, or "Add music" in the Library. Anything in *Files → On My iPhone → Aurora* is picked up automatically. |
 | **Listen Together & Friends** | Join your friends' sessions from your phone and hear the same song at the same second. |
+| **Friends' libraries** | Open a friend's profile and library and download any of their songs to your iPhone, straight from their PC or phone. |
 | **Store** | All 15 themes, fonts, profile effects and player effects. |
 
 Link downloads (YouTube, SoundCloud…) and Discord Connection need Aurora for PC: iOS doesn't allow the tools they use.

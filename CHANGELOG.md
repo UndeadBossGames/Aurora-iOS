@@ -2,6 +2,10 @@
 
 Every version is a git tag. To get an older build, download its .ipa from Releases.
 
+## v1.1.0 — 2026-10-28
+- **Friends' libraries**: open a friend's profile or library from the Friends page and download any of their songs straight to your iPhone (they need Aurora open on their PC or iPhone). Songs keep their title, artist, album and cover and go to Files → Aurora → Music → From friends
+- **Share your library**: friends can browse and download songs from your iPhone too. Turn it off with "Let friends browse and download my songs" on the Friends page
+
 ## v1.0.1 — 2026-10-28
 - "Choose from Files" no longer filters by file type, so every song in the Files app can be picked (non-media files are skipped)
 
