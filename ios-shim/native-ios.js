@@ -238,6 +238,37 @@
         await FS.writeFile({ path: `${dir}/${file}`, directory: DOCS, data: b64(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)) });
         return readTrack(`docs/${dir}/${file}`);
       },
+      // Same Wi-Fi as the sending PC: download straight from it (full speed, no size limit).
+      // Tries each of the PC's addresses; gives up on one if nothing arrives within a few seconds.
+      async downloadUrl({ urls, name, size, onProgress }) {
+        if (!FS || !FS.downloadFile) throw new Error('no downloadFile');
+        const dir = `${MUSIC_DIR}/From friends`;
+        const safe = String(name || 'song').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 150) || 'song';
+        if (!MEDIA_EXT.includes(ext(safe))) throw new Error('Not a music or video file.');
+        await ensureDir(dir, DOCS);
+        for (const url of urls || []) {
+          const file = await uniqueName(dir, safe);
+          const path = `${dir}/${file}`;
+          let last = Date.now(), handle = null;
+          try {
+            handle = await FS.addListener('progress', (e) => { if (e.url !== url) return; last = Date.now(); if (onProgress && e.contentLength) onProgress(Math.min(1, e.bytes / e.contentLength)); });
+          } catch {}
+          try {
+            await new Promise((resolve, reject) => {
+              const timer = setInterval(() => { if (Date.now() - last > 6000) { clearInterval(timer); reject(new Error('timeout')); } }, 1000);
+              FS.downloadFile({ url, path, directory: DOCS, recursive: true, progress: true }).then((r) => { clearInterval(timer); resolve(r); }, (e) => { clearInterval(timer); reject(e); });
+            });
+            const st = await FS.stat({ path, directory: DOCS });
+            if (size && st.size && st.size !== size) throw new Error('incomplete');
+            if (handle && handle.remove) handle.remove();
+            return readTrack(`docs/${path}`);
+          } catch (e) {
+            if (handle && handle.remove) handle.remove();
+            try { await FS.deleteFile({ path, directory: DOCS }); } catch {}
+          }
+        }
+        throw new Error('The PC isn\'t reachable on this Wi-Fi');
+      },
       async deleteFile(p) { const s = split(p); if (!s) return false; try { await FS.deleteFile(s); return true; } catch { return false; } },
     },
     shell: {

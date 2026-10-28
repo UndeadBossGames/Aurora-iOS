@@ -48,6 +48,13 @@ cp -R build-py/app_packages "$APP/app_packages"
 rm -rf ios/App/Python.xcframework
 cp -R build-py/Python.xcframework ios/App/Python.xcframework
 
+# Copy songs from a PC on the same Wi-Fi (plain http to a local address)
+$PB -c "Delete :NSAppTransportSecurity" "$PLIST" >/dev/null 2>&1 || true
+$PB -c "Add :NSAppTransportSecurity dict" "$PLIST"
+$PB -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$PLIST"
+$PB -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
+plutil -replace NSLocalNetworkUsageDescription -string "Aurora copies songs from your PC over Wi-Fi when both are on the same network." "$PLIST"
+
 # Background audio needs the "playback" audio session
 DELEGATE="$APP/AppDelegate.swift"
 if ! grep -q AVAudioSession "$DELEGATE"; then
