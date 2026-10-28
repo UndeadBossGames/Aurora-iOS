@@ -181,7 +181,8 @@
       async files() {
         let picked = [];
         if (Picker) {
-          try { picked = (await Picker.pickFiles({ types: ['public.audio', 'public.movie', 'public.mpeg-4', 'com.apple.m4a-audio', 'public.mp3'], limit: 0 })).files || []; }
+          // no `types` filter: iOS greys out some music files when filtering by type, so we accept anything and keep media files below
+          try { picked = (await Picker.pickFiles({ limit: 0 })).files || []; }
           catch (e) { if (/cancel/i.test(e.message || '')) return []; throw e; }
           await ensureDir(MUSIC_DIR, DOCS);
           const out = [];
