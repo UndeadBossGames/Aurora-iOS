@@ -26,6 +26,7 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
     private let lock = NSLock()
     private var bgTask: UIBackgroundTaskIdentifier = .invalid
     private var selftest: [String: Any] = [:]
+    private var jobInfo: [String: [String: Any]] = [:]   // the job sent by the app, kept for retries
 
     private var docs: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
     private var library: URL { FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0] }
@@ -51,7 +52,7 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
         job["root"] = docs.path
         job["libRoot"] = library.path
         guard let data = try? JSONSerialization.data(withJSONObject: job), let json = String(data: data, encoding: .utf8) else { call.reject("Bad job"); return }
-        lock.lock(); active.insert(id); lock.unlock()
+        lock.lock(); active.insert(id); jobInfo[id] = job; lock.unlock()
         beginBackgroundWork()
         startPolling()
         work.async {
@@ -62,6 +63,7 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func cancel(_ call: CAPPluginCall) {
         let id = call.getString("id") ?? ""
+        FastFetch.shared.cancel(job: id)
         work.async { call.resolve(["json": AuroraPython.call("cancel", arg: "{\"id\":\"\(id)\"}")]) }
     }
 
@@ -138,6 +140,7 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             return
         }
+        if type == "fetch" { fastFetch(ev, jobId: jobId); return }
         if ["done", "error", "cancelled", "expand"].contains(type) { finish(jobId) }
         notify(ev)
     }
@@ -145,6 +148,71 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
     private func notify(_ ev: [String: Any]) {
         notifyListeners("dl", data: ev)
         if ProcessInfo.processInfo.environment["AURORA_SELFTEST"] != nil { selfTestEvent(ev) }
+    }
+
+    // MARK: fast native downloads (see FastFetch.swift)
+
+    private func fastFetch(_ ev: [String: Any], jobId: String) {
+        let raw = ev["parts"] as? [[String: Any]] ?? []
+        var parts: [FastFetch.Part] = []
+        for p in raw {
+            guard let u = p["url"] as? String, let url = URL(string: u), let path = p["path"] as? String else { continue }
+            var headers: [String: String] = [:]
+            for (k, v) in (p["headers"] as? [String: Any]) ?? [:] { headers[k] = "\(v)" }
+            parts.append(FastFetch.Part(url: url, headers: headers, path: URL(fileURLWithPath: path),
+                                        size: (p["size"] as? NSNumber)?.int64Value ?? 0, chunk: (p["chunk"] as? NSNumber)?.int64Value ?? 0))
+        }
+        let then = ev["then"] as? String ?? "file"
+        guard !parts.isEmpty, then != "merge" || parts.count == 2 else { retryWithPython(jobId, reason: "no direct link"); return }
+        notify(["type": "status", "jobId": jobId, "status": "downloading", "statusText": "Starting fast download…", "progress": 0])
+        let scale = then == "merge" ? 98.0 : 100.0
+        FastFetch.shared.run(job: jobId, parts: parts, progress: { [weak self] frac, speed, eta in
+            var e: [String: Any] = ["type": "progress", "jobId": jobId, "progress": (frac * scale * 10).rounded() / 10, "speed": Self.fmtSpeed(speed)]
+            if let eta = eta { e["eta"] = Self.fmtEta(eta) }
+            self?.notify(e)
+        }, done: { [weak self] err in
+            guard let self = self else { return }
+            if let err = err {
+                if err is CancellationError { self.notify(["type": "cancelled", "jobId": jobId]); self.finish(jobId); return }
+                self.retryWithPython(jobId, reason: err.localizedDescription)
+                return
+            }
+            var track = ev["track"] as? [String: Any] ?? [:]
+            if then == "merge" {
+                self.handle(["type": "merge", "jobId": jobId, "video": parts[0].path.path, "audio": parts[1].path.path, "out": ev["out"] as? String ?? parts[0].path.path, "track": track])
+                return
+            }
+            track["size"] = (try? FileManager.default.attributesOfItem(atPath: parts[0].path.path)[.size] as? NSNumber)?.intValue ?? 0
+            self.notify(["type": "file", "jobId": jobId, "track": track])
+            self.notify(["type": "done", "jobId": jobId])
+            self.finish(jobId)
+        })
+    }
+
+    /// The fast path failed (unusual link, expired address...): let yt-dlp download it the classic way.
+    private func retryWithPython(_ jobId: String, reason: String) {
+        lock.lock(); var job = jobInfo[jobId]; lock.unlock()
+        guard job != nil else { notify(["type": "error", "jobId": jobId, "error": "Download failed: \(reason)"]); finish(jobId); return }
+        job!["noNative"] = true
+        notify(["type": "status", "jobId": jobId, "status": "downloading", "statusText": "Retrying…", "progress": 0])
+        guard let data = try? JSONSerialization.data(withJSONObject: job!), let json = String(data: data, encoding: .utf8) else { return }
+        work.async {
+            _ = AuroraPython.call("start", arg: json)
+            self.startPolling()
+        }
+    }
+
+    static func fmtSpeed(_ b: Double) -> String {
+        if b <= 0 { return "" }
+        let units = ["B/s", "KB/s", "MB/s", "GB/s"]
+        var v = b, i = 0
+        while v >= 1000 && i < units.count - 1 { v /= 1000; i += 1 }
+        return i == 0 ? "\(Int(v))B/s" : String(format: v < 10 ? "%.1f%@" : "%.0f%@", v, units[i])
+    }
+
+    static func fmtEta(_ s: Double) -> String {
+        let t = max(0, Int(s.rounded()))
+        return t >= 3600 ? String(format: "%d:%02d:%02d", t / 3600, (t % 3600) / 60, t % 60) : String(format: "%02d:%02d", t / 60, t % 60)
     }
 
     // MARK: merging (H.264 video + AAC audio -> MP4, no re-encoding)
@@ -214,64 +282,73 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    // Downloads tried by the CI self-test, one after another. YouTube usually refuses cloud servers
+    // ("confirm you're not a bot"), so the others prove the rest of the pipeline: SoundCloud through
+    // yt-dlp, and two files from this app's own GitHub repo through the fast native downloader.
+    private var selftestQueue: [[String: String]] = [
+        ["name": "youtube", "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "format": "video-best"],
+        ["name": "soundcloud", "url": "https://soundcloud.com/forss/flickermood", "format": "audio-m4a"],
+        ["name": "direct-audio", "url": "https://raw.githubusercontent.com/UndeadBossGames/Aurora-iOS/main/assets/selftest/tone.m4a", "format": "audio-m4a"],
+        ["name": "direct-video", "url": "https://raw.githubusercontent.com/UndeadBossGames/Aurora-iOS/main/assets/selftest/clip.mp4", "format": "video-best"],
+    ]
+    private var selftestCurrent: [String: Any] = [:]
+    private var selftestStarted: TimeInterval = 0
+
     private func runSelfTest() {
         work.async {
             self.selftest["started"] = Date().timeIntervalSince1970
             if let err = AuroraPython.start() { self.selftest["startError"] = err; self.selftest["finished"] = true; self.writeSelfTest(); return }
             self.selftest["version"] = AuroraPython.call("version", arg: "{}")
+            self.selftest["results"] = [[String: Any]]()
             self.writeSelfTest()
-            self.selftest["lookup"] = AuroraPython.call("selftest", arg: "{}")
-            self.writeSelfTest()
-            let job: [String: Any] = ["id": "selftest", "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "format": "video-best", "dir": "Music/Downloads",
-                                      "root": self.docs.path, "libRoot": self.library.path]
-            let json = String(data: try! JSONSerialization.data(withJSONObject: job), encoding: .utf8)!
-            self.lock.lock(); self.active.insert("selftest"); self.lock.unlock()
-            self.selftest["download"] = AuroraPython.call("start", arg: json)
-            self.selftest["events"] = [[String: Any]]()
-            self.writeSelfTest()
+            self.nextSelfTest()
+        }
+    }
+
+    private func nextSelfTest() {
+        guard !selftestQueue.isEmpty else { selftest["finished"] = true; writeSelfTest(); return }
+        let t = selftestQueue.removeFirst()
+        selftestCurrent = ["name": t["name"] ?? "?", "url": t["url"] ?? "", "events": [[String: Any]]()]
+        selftestStarted = Date().timeIntervalSince1970
+        let job: [String: Any] = ["id": "selftest", "url": t["url"] ?? "", "format": t["format"] ?? "audio-m4a", "dir": "Music/Downloads",
+                                  "root": docs.path, "libRoot": library.path]
+        lock.lock(); active.insert("selftest"); jobInfo["selftest"] = job; lock.unlock()
+        let json = String(data: try! JSONSerialization.data(withJSONObject: job), encoding: .utf8)!
+        work.async {
+            _ = AuroraPython.call("start", arg: json)
             self.startPolling()
         }
     }
 
     private func selfTestEvent(_ ev: [String: Any]) {
         guard (ev["jobId"] as? String) == "selftest" else { return }
-        var list = selftest["events"] as? [[String: Any]] ?? []
-        if (ev["type"] as? String) != "progress" || list.count < 40 { list.append(ev) }
-        selftest["events"] = list
+        var list = selftestCurrent["events"] as? [[String: Any]] ?? []
+        if (ev["type"] as? String) != "progress" || list.count < 25 { list.append(ev) }
+        selftestCurrent["events"] = list
         let type = ev["type"] as? String ?? ""
-        // YouTube often blocks cloud servers ("confirm you're not a bot"); then check the whole
-        // pipeline with a SoundCloud song instead, so the CI run still proves downloads work.
-        if type == "error", selftest["fallback"] == nil {
-            selftest["youtubeError"] = ev["error"] ?? "?"
-            selftest["fallback"] = "soundcloud"
-            selftest["events"] = [[String: Any]]()
-            writeSelfTest()
-            let job: [String: Any] = ["id": "selftest", "url": "https://soundcloud.com/forss/flickermood", "format": "audio-m4a", "dir": "Music/Downloads",
-                                      "root": docs.path, "libRoot": library.path]
-            let json = String(data: try! JSONSerialization.data(withJSONObject: job), encoding: .utf8)!
-            lock.lock(); active.insert("selftest"); lock.unlock()
-            work.async {
-                self.selftest["download2"] = AuroraPython.call("start", arg: json)
-                self.startPolling()
+        guard ["done", "error", "cancelled"].contains(type) else { return }
+        selftestCurrent["result"] = type
+        selftestCurrent["seconds"] = Date().timeIntervalSince1970 - selftestStarted
+        selftestCurrent["native"] = list.contains { ($0["statusText"] as? String) == "Starting fast download…" }
+        if type == "done", let file = list.first(where: { ($0["type"] as? String) == "file" }), let track = file["track"] as? [String: Any], let p = track["path"] as? String {
+            let abs = docs.appendingPathComponent(String(p.dropFirst("docs/".count)))
+            let asset = AVURLAsset(url: abs)
+            let sem = DispatchSemaphore(value: 0)
+            let bytes = track["size"] ?? 0
+            Task {
+                let v = (try? await asset.loadTracks(withMediaType: .video).count) ?? -1
+                let a = (try? await asset.loadTracks(withMediaType: .audio).count) ?? -1
+                let d = (try? await asset.load(.duration).seconds) ?? -1
+                self.selftestCurrent["file"] = ["bytes": bytes, "videoTracks": v, "audioTracks": a, "seconds": d]
+                sem.signal()
             }
-            return
+            sem.wait()
+            if let b = (track["size"] as? NSNumber)?.doubleValue, let secs = selftestCurrent["seconds"] as? Double, secs > 0 { selftestCurrent["MBps"] = b / secs / 1_000_000 }
         }
-        if ["done", "error", "cancelled"].contains(type) {
-            if type == "done", let file = list.first(where: { ($0["type"] as? String) == "file" }), let track = file["track"] as? [String: Any], let p = track["path"] as? String {
-                let abs = docs.appendingPathComponent(String(p.dropFirst("docs/".count)))
-                let asset = AVURLAsset(url: abs)
-                let sem = DispatchSemaphore(value: 0)
-                Task {
-                    let v = (try? await asset.loadTracks(withMediaType: .video).count) ?? -1
-                    let a = (try? await asset.loadTracks(withMediaType: .audio).count) ?? -1
-                    let d = (try? await asset.load(.duration).seconds) ?? -1
-                    self.selftest["mergedFile"] = ["videoTracks": v, "audioTracks": a, "seconds": d, "bytes": track["size"] ?? 0]
-                    sem.signal()
-                }
-                sem.wait()
-            }
-            selftest["finished"] = true
-        }
+        var results = selftest["results"] as? [[String: Any]] ?? []
+        results.append(selftestCurrent)
+        selftest["results"] = results
         writeSelfTest()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1) { self.nextSelfTest() }
     }
 }
