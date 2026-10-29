@@ -14,8 +14,9 @@ Aurora, the music player, on your iPhone. Same look, same profiles, same Store t
 | **Listen Together & Friends** | Join your friends' sessions from your phone and hear the same song at the same second. |
 | **Friends' libraries** | Open a friend's profile and library and download any of their songs to your iPhone, straight from their PC or phone. |
 | **Store** | All 15 themes, fonts, profile effects and player effects. |
+| **Video Downloader** | YouTube, SoundCloud, Spotify links and 1000+ sites, as video or music, with yt-dlp running inside the app. No speed cap, 5 downloads at once, playlists in parallel. |
 
-Link downloads (YouTube, SoundCloud…) and Discord Connection need Aurora for PC: iOS doesn't allow the tools they use.
+Discord Connection needs Aurora for PC (it talks to the Discord desktop app).
 
 ## How it's built
 - `web/`: Aurora's UI, copied from the desktop repo with `bash scripts/sync-desktop.sh ../Aurora`.

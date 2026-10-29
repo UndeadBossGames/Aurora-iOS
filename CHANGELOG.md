@@ -2,6 +2,15 @@
 
 Every version is a git tag. To get an older build, download its .ipa from Releases.
 
+## v1.2.0 — 2026-10-28
+- **Video Downloader on iPhone**: paste a link from YouTube, SoundCloud, Spotify, Vimeo, TikTok and 1000+ other sites and save it as video or music, right on the phone. yt-dlp runs inside the app (embedded Python), and best-quality videos are joined with iOS's own AVFoundation, so no computer is needed
+- **Fast, uncapped downloads**: no speed limit, 8 parallel pieces per video, 5 downloads at once, and playlists are split so their songs download side by side. Downloads keep going for a while if you leave the app
+- **Discover** works on iPhone too: search YouTube or SoundCloud, preview, and download
+- **Listen Together on iPhone**: if you don't have the host's song, Aurora gets it straight from the host's PC or phone (over Wi-Fi when you're on the same network), or downloads it, and starts in sync
+- **Wi-Fi fast path**: songs from a PC on the same Wi-Fi copy directly at full network speed (friends' libraries and Listen Together)
+- **iOS polish**: haptic feedback, long-press menus, swipe from the left edge to go back, swipe gestures on the full-screen player, iOS-style action sheets, a tab bar that steps aside for the keyboard, and aurora:// links so Shortcuts and other apps can send a link to download
+- Share sheet / Shortcuts: open `aurora://download?url=<link>` to start a download
+
 ## v1.1.0 — 2026-10-28
 - **Friends' libraries**: open a friend's profile or library from the Friends page and download any of their songs straight to your iPhone (they need Aurora open on their PC or iPhone). Songs keep their title, artist, album and cover and go to Files → Aurora → Music → From friends
 - **Share your library**: friends can browse and download songs from your iPhone too. Turn it off with "Let friends browse and download my songs" on the Friends page
