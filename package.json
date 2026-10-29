@@ -1,6 +1,6 @@
 {
   "name": "aurora-ios",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "Aurora for iPhone: the Aurora music player, built with Capacitor for sideloading (not the App Store).",
   "license": "MIT",
