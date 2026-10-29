@@ -18,8 +18,9 @@ end
 %w[AuroraPython.h App-Bridging-Header.h].each { |f| add_file(group, target, f, false) }
 %w[AuroraPython.m AuroraDLPlugin.swift AuroraViewController.swift].each { |f| add_file(group, target, f, true) }
 
-# 2) Python code folders (blue folder references, copied as-is into the app bundle)
-%w[app app_packages].each do |dir|
+# 2) Python code folders (blue folder references, copied as-is into the app bundle).
+#    Not called "app": on macOS file names ignore case, so it would collide with the "App" executable.
+%w[aurora_app app_packages].each do |dir|
   ref = group.children.find { |c| c.path == dir } || group.new_reference(dir)
   ref.last_known_file_type = 'folder'
   target.resources_build_phase.add_file_reference(ref, true)
@@ -52,7 +53,7 @@ phase.shell_script = <<~SH
   UTILS="$PROJECT_DIR/Python.xcframework/build/build_utils.sh"
   [ -f "$UTILS" ] || UTILS="$PROJECT_DIR/Python.xcframework/build/utils.sh"
   source "$UTILS"
-  install_python Python.xcframework app app_packages
+  install_python Python.xcframework aurora_app app_packages
 SH
 target.build_phases.delete(phase)
 idx = target.build_phases.index(embed) || target.build_phases.length

@@ -82,7 +82,7 @@ static void AppendPath(PyConfig *config, NSString *path) {
         config.module_search_paths_set = 1;
         AppendPath(&config, stdlib);
         AppendPath(&config, [stdlib stringByAppendingPathComponent:@"lib-dynload"]);
-        AppendPath(&config, [res stringByAppendingPathComponent:@"app"]);
+        AppendPath(&config, [res stringByAppendingPathComponent:@"aurora_app"]);
         AppendPath(&config, [res stringByAppendingPathComponent:@"app_packages"]);
 
         status = Py_InitializeFromConfig(&config);

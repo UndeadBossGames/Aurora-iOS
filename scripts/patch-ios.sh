@@ -41,9 +41,9 @@ grep -q 'customClass="AuroraViewController"' "$STORY" || { echo "patch-ios: coul
 
 # native sources, the Python engine and its packages
 cp ios-native/AuroraPython.h ios-native/AuroraPython.m ios-native/AuroraDLPlugin.swift ios-native/AuroraViewController.swift ios-native/App-Bridging-Header.h "$APP/"
-rm -rf "$APP/app" "$APP/app_packages"
-mkdir -p "$APP/app"
-cp ios-native/app/*.py "$APP/app/"
+rm -rf "$APP/aurora_app" "$APP/app_packages"
+mkdir -p "$APP/aurora_app"
+cp ios-native/app/*.py "$APP/aurora_app/"
 cp -R build-py/app_packages "$APP/app_packages"
 rm -rf ios/App/Python.xcframework
 cp -R build-py/Python.xcframework ios/App/Python.xcframework
