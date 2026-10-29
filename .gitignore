@@ -4,3 +4,4 @@ ios/
 dist/
 .DS_Store
 build-py/
+__pycache__/
