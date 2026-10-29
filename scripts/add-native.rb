@@ -16,7 +16,7 @@ end
 
 # 1) native sources (copied into ios/App/App by the workflow)
 %w[AuroraPython.h App-Bridging-Header.h].each { |f| add_file(group, target, f, false) }
-%w[AuroraPython.m AuroraDLPlugin.swift AuroraViewController.swift].each { |f| add_file(group, target, f, true) }
+%w[AuroraPython.m AuroraDLPlugin.swift FastFetch.swift AuroraViewController.swift].each { |f| add_file(group, target, f, true) }
 
 # 2) Python code folders (blue folder references, copied as-is into the app bundle).
 #    Not called "app": on macOS file names ignore case, so it would collide with the "App" executable.
