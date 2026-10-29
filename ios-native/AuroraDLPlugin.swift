@@ -239,6 +239,23 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
         if (ev["type"] as? String) != "progress" || list.count < 40 { list.append(ev) }
         selftest["events"] = list
         let type = ev["type"] as? String ?? ""
+        // YouTube often blocks cloud servers ("confirm you're not a bot"); then check the whole
+        // pipeline with a SoundCloud song instead, so the CI run still proves downloads work.
+        if type == "error", selftest["fallback"] == nil {
+            selftest["youtubeError"] = ev["error"] ?? "?"
+            selftest["fallback"] = "soundcloud"
+            selftest["events"] = [[String: Any]]()
+            writeSelfTest()
+            let job: [String: Any] = ["id": "selftest", "url": "https://soundcloud.com/forss/flickermood", "format": "audio-m4a", "dir": "Music/Downloads",
+                                      "root": docs.path, "libRoot": library.path]
+            let json = String(data: try! JSONSerialization.data(withJSONObject: job), encoding: .utf8)!
+            lock.lock(); active.insert("selftest"); lock.unlock()
+            work.async {
+                self.selftest["download2"] = AuroraPython.call("start", arg: json)
+                self.startPolling()
+            }
+            return
+        }
         if ["done", "error", "cancelled"].contains(type) {
             if type == "done", let file = list.first(where: { ($0["type"] as? String) == "file" }), let track = file["track"] as? [String: Any], let p = track["path"] as? String {
                 let abs = docs.appendingPathComponent(String(p.dropFirst("docs/".count)))
