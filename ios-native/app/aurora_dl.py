@@ -146,6 +146,7 @@ class _Job:
         self.dir = os.path.join(self.root, data.get('dir') or 'Music/Downloads')
         self.meta = data.get('meta') or {}
         self.source = data.get('source') or ''
+        self.native_off = bool(data.get('noNative'))  # retry path: let yt-dlp download it itself
         self.cancelled = False
         self.logger = _Logger(self.id)
         self.base = 0.0       # progress range for multi-part downloads
@@ -210,6 +211,34 @@ def _download_with(job, info, spec, suffix=''):
     if not path or not os.path.exists(path):
         raise RuntimeError('The download finished but the file is missing.')
     return path
+
+
+def _resolve(job, info, spec, suffix=''):
+    """Pick a format with yt-dlp but don't download it: the app's native downloader fetches it
+    (many connections in parallel, at full Wi-Fi/5G speed), which is far faster than downloading
+    in Python. Returns None when the format can't be fetched directly (HLS/DASH fragments...)."""
+    extra = {'format': spec}
+    if suffix:
+        extra['outtmpl'] = {'default': os.path.join(job.dir, '%(title).140B [%(id)s]' + suffix + '.%(ext)s')}
+    with yt_dlp.YoutubeDL(job.opts(**extra)) as ydl:
+        res = ydl.process_ie_result(copy.deepcopy(info), download=False)
+        if not res or res.get('requested_formats') and len(res['requested_formats']) != 1:
+            return None
+        f = (res.get('requested_formats') or [res])[0]
+        proto = str(f.get('protocol') or '')
+        url = f.get('url')
+        if not url or proto not in ('http', 'https'):
+            return None
+        path = ydl.prepare_filename({**res, **{k: f[k] for k in ('ext',) if f.get(k)}})
+    headers = dict(f.get('http_headers') or res.get('http_headers') or {})
+    return {'url': url, 'headers': headers, 'path': path,
+            'size': int(f.get('filesize') or 0), 'approx': int(f.get('filesize_approx') or 0),
+            'chunk': int(((f.get('downloader_options') or {}).get('http_chunk_size')) or 0)}
+
+
+def _fetch(job, parts, then, track, out=None):
+    """Hand the downloads to the app's native fast downloader."""
+    _emit(type='fetch', jobId=job.id, parts=parts, then=then, track=track, out=out, title=track.get('title'))
 
 
 def _save_cover(job, info, key):
@@ -292,6 +321,14 @@ def _run(job):
         h = _height_filter(job.format)
         if not want_video:
             job.base, job.span = 0.0, 100.0
+            try:
+                r = _resolve(job, info, AUDIO_SPEC)
+            except Exception as e:
+                r = None
+                job.logger.warning(f'native fetch unavailable: {e}')
+            if r and not job.native_off:
+                _fetch(job, [r], 'file', _track(job, info, r['path'], 'audio'))
+                return
             path = _download_with(job, info, AUDIO_SPEC)
             _emit(type='file', jobId=job.id, track=_track(job, info, path, 'audio'))
             _emit(type='done', jobId=job.id)
@@ -303,6 +340,17 @@ def _run(job):
             and any((f.get('acodec') or 'none') != 'none' and (f.get('vcodec') or 'none') == 'none' for f in formats)
         if has_split:
             try:
+                rv = ra = None
+                try:
+                    rv = _resolve(job, info, VIDEO_ONLY_SPEC.format(h=h) + '/' + VIDEO_ONLY_SPEC.format(h=''), '.video')
+                    ra = _resolve(job, info, AUDIO_ONLY_SPEC, '.audio')
+                except Exception as e:
+                    job.logger.warning(f'native fetch unavailable: {e}')
+                if rv and ra and not job.native_off:
+                    out = rv['path'].replace('.video.', '.', 1)
+                    out = os.path.splitext(out)[0] + '.mp4'
+                    _fetch(job, [rv, ra], 'merge', _track(job, info, out, 'video'), out=out)
+                    return
                 job.base, job.span = 0.0, 82.0
                 vpath = _download_with(job, info, VIDEO_ONLY_SPEC.format(h=h) + '/' + VIDEO_ONLY_SPEC.format(h=''), '.video')
                 job.base, job.span = 82.0, 18.0
@@ -319,6 +367,14 @@ def _run(job):
             except Exception as e:  # no matching split formats: fall back to a single file
                 job.logger.warning(f'split download failed, using single file: {e}')
         job.base, job.span = 0.0, 100.0
+        try:
+            r = _resolve(job, info, SINGLE_SPEC.format(h=h))
+        except Exception as e:
+            r = None
+            job.logger.warning(f'native fetch unavailable: {e}')
+        if r and not job.native_off:
+            _fetch(job, [r], 'file', _track(job, info, r['path'], 'video'))
+            return
         path = _download_with(job, info, SINGLE_SPEC.format(h=h))
         _emit(type='file', jobId=job.id, track=_track(job, info, path, 'video'))
         _emit(type='done', jobId=job.id)
