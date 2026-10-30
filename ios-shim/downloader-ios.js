@@ -81,7 +81,7 @@
       j.statusText = 'Starting…';
       emitJob(j);
       if (!plugin) return fail(j, 'The download engine is missing from this build.');
-      plugin.start({ job: { id: j.id, url: j.url, format: j.format, playlist: j.playlist, dir: 'Music/Downloads', meta: j.meta || null, source: j.source } })
+      plugin.start({ job: { id: j.id, url: j.url, format: j.format, playlist: j.playlist, dir: 'Music/Downloads', meta: j.meta || null, source: j.source, trimSilence: !(window.State && State.settings().trimSilence === false) } })
         .then((r) => { const res = parse(r); if (res && res.ok === false) fail(j, res.error || 'Could not start'); })
         .catch((e) => fail(j, e.message || String(e)));
     });
@@ -99,7 +99,7 @@
         case 'start': j.title = ev.title || j.title; j.thumbnail = ev.thumbnail || j.thumbnail; j.statusText = ''; break;
         case 'progress': j.progress = ev.progress || 0; j.speed = ev.speed || ''; j.eta = ev.eta || ''; j.statusText = ''; break;
         case 'file': {
-          const t = { ...ev.track, id: native._trackId(ev.track.path), addedAt: Date.now() };
+          const t = { ...ev.track, id: native._trackId(ev.track.path), addedAt: Date.now(), trimChecked: !(window.State && State.settings().trimSilence === false) };
           j.files.push(t);
           fire('file', { jobId: j.id, track: t, addToLibrary: j.addToLibrary });
           break;
@@ -149,6 +149,11 @@
       return res.results || [];
     },
     async list() { return [...jobs.values()].map(pub); },
+    // cut the silent ending off a song that's already in the library
+    async trim(track) {
+      if (!plugin || !plugin.trim) throw new Error('Not available in this build');
+      return plugin.trim({ path: track.path });
+    },
     async cancel(id) {
       const j = jobs.get(id);
       if (!j) return;
