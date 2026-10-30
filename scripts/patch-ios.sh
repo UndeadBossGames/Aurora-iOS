@@ -40,7 +40,7 @@ sed -i '' 's/customClass="CAPBridgeViewController" customModule="Capacitor"/cust
 grep -q 'customClass="AuroraViewController"' "$STORY" || { echo "patch-ios: could not set AuroraViewController in Main.storyboard" >&2; grep -n customClass "$STORY" >&2; exit 1; }
 
 # native sources, the Python engine and its packages
-cp ios-native/AuroraPython.h ios-native/AuroraPython.m ios-native/AuroraDLPlugin.swift ios-native/FastFetch.swift ios-native/AuroraViewController.swift ios-native/App-Bridging-Header.h "$APP/"
+cp ios-native/AuroraPython.h ios-native/AuroraPython.m ios-native/AuroraDLPlugin.swift ios-native/FastFetch.swift ios-native/SilenceTrim.swift ios-native/AuroraViewController.swift ios-native/App-Bridging-Header.h "$APP/"
 rm -rf "$APP/aurora_app" "$APP/app_packages"
 mkdir -p "$APP/aurora_app"
 cp ios-native/app/*.py "$APP/aurora_app/"
