@@ -17,6 +17,7 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "search", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "update", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "haptic", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "trim", returnType: CAPPluginReturnPromise),
     ]
 
     private let work = DispatchQueue(label: "aurora.python", qos: .userInitiated, attributes: .concurrent)
@@ -27,6 +28,7 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
     private var bgTask: UIBackgroundTaskIdentifier = .invalid
     private var selftest: [String: Any] = [:]
     private var jobInfo: [String: [String: Any]] = [:]   // the job sent by the app, kept for retries
+    private var held: [String: [[String: Any]]] = [:]    // events that wait while a job's file is being trimmed
 
     private var docs: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
     private var library: URL { FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0] }
@@ -133,16 +135,79 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
                     var track = ev["track"] as? [String: Any] ?? [:]
                     let size = (try? FileManager.default.attributesOfItem(atPath: o)[.size] as? NSNumber)?.intValue ?? 0
                     track["size"] = size
-                    self.notify(["type": "file", "jobId": jobId, "track": track])
-                    self.notify(["type": "done", "jobId": jobId])
+                    self.trimmedFile(["type": "file", "jobId": jobId, "track": track], jobId: jobId) { fixed in
+                        self.notify(fixed)
+                        self.notify(["type": "done", "jobId": jobId])
+                        self.finish(jobId)
+                    }
+                    return
                 }
                 self.finish(jobId)
             }
             return
         }
         if type == "fetch" { fastFetch(ev, jobId: jobId); return }
+        // while the downloaded file is being trimmed, the job's next events (like "done") wait
+        lock.lock()
+        if held[jobId] != nil { held[jobId]!.append(ev); lock.unlock(); return }
+        if type == "file" { held[jobId] = [] }
+        lock.unlock()
+        if type == "file" {
+            trimmedFile(ev, jobId: jobId) { [weak self] fixed in
+                guard let self = self else { return }
+                self.notify(fixed)
+                self.lock.lock(); let later = self.held.removeValue(forKey: jobId) ?? []; self.lock.unlock()
+                for e in later { self.handle(e) }
+            }
+            return
+        }
         if ["done", "error", "cancelled", "expand"].contains(type) { finish(jobId) }
         notify(ev)
+    }
+
+    // MARK: cut the silent ending off a finished download (see SilenceTrim.swift)
+
+    private func absolutePath(_ rel: String) -> URL {
+        if rel.hasPrefix("docs/") { return docs.appendingPathComponent(String(rel.dropFirst(5))) }
+        if rel.hasPrefix("lib/") { return library.appendingPathComponent(String(rel.dropFirst(4))) }
+        return URL(fileURLWithPath: rel)
+    }
+
+    private func wantsTrim(_ jobId: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return (jobInfo[jobId]?["trimSilence"] as? Bool) != false
+    }
+
+    /// Takes a "file" event, trims the file and returns the event with the new length and size.
+    private func trimmedFile(_ ev: [String: Any], jobId: String, done: @escaping ([String: Any]) -> Void) {
+        guard wantsTrim(jobId), let original = ev["track"] as? [String: Any], let rel = original["path"] as? String else { done(ev); return }
+        notify(["type": "status", "jobId": jobId, "status": "downloading", "statusText": "Trimming the silent ending…", "progress": 99.5])
+        let file = absolutePath(rel)
+        Task {
+            var out = ev
+            var track = original
+            if let r = await SilenceTrim.trim(file) {
+                if r.trimmed {
+                    track["duration"] = r.duration
+                    track["size"] = r.size
+                    track["trimmed"] = true
+                } else if r.end < r.duration - SilenceTrim.minSilence {
+                    track["end"] = r.end          // couldn't rewrite this format: the player stops here
+                }
+                out["track"] = track
+            }
+            done(out)
+        }
+    }
+
+    /// From the app: trim a song that's already in the library. Returns { trimmed, end, duration, size }.
+    @objc func trim(_ call: CAPPluginCall) {
+        guard let rel = call.getString("path") else { call.reject("No path"); return }
+        let file = absolutePath(rel)
+        Task {
+            guard let r = await SilenceTrim.trim(file) else { call.resolve(["ok": false]); return }
+            call.resolve(["ok": true, "trimmed": r.trimmed, "end": r.end, "duration": r.duration, "size": r.size])
+        }
     }
 
     private func notify(_ ev: [String: Any]) {
@@ -183,9 +248,11 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
             track["size"] = (try? FileManager.default.attributesOfItem(atPath: parts[0].path.path)[.size] as? NSNumber)?.intValue ?? 0
-            self.notify(["type": "file", "jobId": jobId, "track": track])
-            self.notify(["type": "done", "jobId": jobId])
-            self.finish(jobId)
+            self.trimmedFile(["type": "file", "jobId": jobId, "track": track], jobId: jobId) { fixed in
+                self.notify(fixed)
+                self.notify(["type": "done", "jobId": jobId])
+                self.finish(jobId)
+            }
         })
     }
 
@@ -290,6 +357,7 @@ public class AuroraDLPlugin: CAPPlugin, CAPBridgedPlugin {
         ["name": "soundcloud", "url": "https://soundcloud.com/forss/flickermood", "format": "audio-m4a"],
         ["name": "direct-audio", "url": "https://raw.githubusercontent.com/UndeadBossGames/Aurora-iOS/main/assets/selftest/tone.m4a", "format": "audio-m4a"],
         ["name": "direct-video", "url": "https://raw.githubusercontent.com/UndeadBossGames/Aurora-iOS/main/assets/selftest/clip.mp4", "format": "video-best"],
+        ["name": "silent-ending", "url": "https://raw.githubusercontent.com/UndeadBossGames/Aurora-iOS/main/assets/selftest/tail.m4a", "format": "audio-m4a"],
     ]
     private var selftestCurrent: [String: Any] = [:]
     private var selftestStarted: TimeInterval = 0
