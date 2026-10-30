@@ -12,6 +12,7 @@ Aurora, the music player, on your iPhone. Same look, same profiles, same Store t
 | **Transfer songs** | Copy or move downloaded songs from one profile to another, or share them with every profile (You → your profile → Transfer songs). |
 | **Get music on** | iTunes File Sharing from your PC, the Files app, or "Add music" in the Library. Anything in *Files → On My iPhone → Aurora* is picked up automatically. |
 | **Listen Together & Friends** | Join your friends' sessions from your phone and hear the same song at the same second. |
+| **Standard iPhone layout** | Tab bar with Home, Search, Your Library, Store and Create; mixes and stations, artist pages, a full-screen player with synced lyrics, queue, AirPlay and a sleep timer. Classic layout still available in Settings. |
 | **Aurora Account** | Sign in with the same account as on your PC: profile, Favorites and playlists sync, and every song on your PC can be downloaded to the iPhone. End-to-end encrypted. |
 | **Fast downloads** | yt-dlp finds the media, iOS downloads it over many connections at once at full Wi-Fi/5G speed. |
 | **Friends' libraries** | Open a friend's profile and library and download any of their songs to your iPhone, straight from their PC or phone. |
