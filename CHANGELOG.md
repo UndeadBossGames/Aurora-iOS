@@ -26,6 +26,8 @@ Every version is a git tag. To get an older build, download its .ipa from Releas
 - **Tap a song to play it** everywhere (the classic layout needed a double tap).
 - **Music keeps playing when you leave the app** or lock your iPhone, including music videos (iOS used to pause them). Lock screen and headphone controls (play/pause, next, previous, seek) keep working, songs keep advancing through the playlist, and the app picks up at the same spot when you come back.
 - **Shuffle never repeats a song** within a round, not even a second copy of the same song. Turning shuffle on halfway only plays songs you haven't heard yet. With Repeat on, a new shuffled round starts, never with the song that just ended. With Repeat off, playback stops after every song has played once.
+- **Songs and videos are sorted apart**: downloads now say what they are before and after downloading (Song · .m4a, or Video · .mp4). They're saved in separate Songs and Videos folders, and Your Library has **Songs** and **Videos** filters listing every file of that type. Every song shows its file type (M4A, MP3 or MP4). The iPhone can't create MP3 files, so songs downloaded on the phone are .m4a: the same sound in Apple's own format. Songs from your PC stay .mp3.
+- **Sound drifting between your ears** (iOS Spatial Audio with head tracking): Aurora now asks iOS 18 and later to play plain stereo. If it still happens, the player's ⋯ menu → "Sound moving between ears?" shows the one setting to switch off.
 - Prefer the old look? Settings → Appearance → iPhone layout → Classic.
 
 ## v1.3.0 — 2026-10-29
