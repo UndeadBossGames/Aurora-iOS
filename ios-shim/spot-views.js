@@ -444,14 +444,89 @@ const SpotViews = (() => {
       pls.slice(0, 2).forEach((p) => results.push({ kind: 'pl', p }));
       ts.slice(2, 14).forEach((t) => results.push({ kind: 'track', t }));
       arts.slice(2, 5).forEach((a) => results.push({ kind: 'artist', a }));
+      if (results.length) out.appendChild(html('<h2 class="sp-h2">In your library</h2>'));
       for (const r of results) out.appendChild(resultRow(r, ts, q));
-      const web = html(`<div class="sp-lrow sp-web">${icon('download', 26)}<div class="sp-row-t"><b>Search YouTube and SoundCloud</b><span>Find "${esc(q)}" online and download it</span></div>${icon('chevronRight', 20)}</div>`);
+      // songs from the internet, right here: tap one to download it
+      const online = html(`<section class="sp-online"><h2 class="sp-h2">Songs online <span class="sp-src-pick"><button data-s="youtube" class="${onlineSource === 'youtube' ? 'on' : ''}">YouTube</button><button data-s="soundcloud" class="${onlineSource === 'soundcloud' ? 'on' : ''}">SoundCloud</button></span></h2><div class="sp-online-list"><div class="sp-online-wait"><span class="fl-spin sm"></span> Searching ${onlineSource === 'youtube' ? 'YouTube' : 'SoundCloud'}…</div></div></section>`);
+      $$('.sp-src-pick button', online).forEach((b) => b.onclick = () => { onlineSource = b.dataset.s; State.setPref('discoverSource', onlineSource); draw(); });
+      if (q.length >= 2) { out.appendChild(online); searchOnline(q, $('.sp-online-list', online)); }
+      const web = html(`<div class="sp-lrow sp-web">${icon('search', 24)}<div class="sp-row-t"><b>See all results for "${esc(q)}"</b><span>Preview videos and download in Discover</span></div>${icon('chevronRight', 20)}</div>`);
       web.onclick = () => { addRecentSearch({ k: 'q', v: q }); searchMode = false; App.go('discover', q); };
       out.appendChild(web);
-      if (!results.length) out.appendChild(html(`<div class="sp-noresults"><b>Couldn't find "${esc(q)}"</b><span>Try searching again using a different spelling or keyword, or search online above.</span></div>`));
     };
     draw();
   }
+  // ---------- online song search (YouTube / SoundCloud) ----------
+  let onlineSource = null;
+  const onlineCache = new Map();
+  const dlByUrl = new Map(); // url -> downloader job
+  let onlineSeq = 0;
+  async function searchOnline(q, box) {
+    onlineSource = onlineSource || State.prefs().discoverSource || 'youtube';
+    const seq = ++onlineSeq;
+    const key = onlineSource + '|' + q.toLowerCase();
+    await new Promise((r) => setTimeout(r, onlineCache.has(key) ? 0 : 450)); // wait for typing to pause
+    if (seq !== onlineSeq || !box.isConnected) return;
+    let list = onlineCache.get(key);
+    if (!list) {
+      try { list = await native.dl.search(q, onlineSource, 10); onlineCache.set(key, list); }
+      catch (e) { if (box.isConnected) box.innerHTML = `<div class="sp-noresults small"><span>${esc(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))}</span></div>`; return; }
+    }
+    if (seq !== onlineSeq || !box.isConnected) return;
+    box.innerHTML = '';
+    if (!list.length) { box.innerHTML = '<div class="sp-noresults small"><span>Nothing found online.</span></div>'; return; }
+    for (const r of list) box.appendChild(onlineRow(r));
+  }
+  function onlineState(r) {
+    const have = tracks().find((t) => t.url === r.url);
+    if (have) return { st: 'have', t: have };
+    const j = dlByUrl.get(r.url);
+    if (j && !['done', 'error', 'cancelled'].includes(j.status)) return { st: 'busy', p: j.progress || 0 };
+    if (j && j.status === 'error') return { st: 'error' };
+    return { st: 'none' };
+  }
+  function onlineRow(r) {
+    const el = html(`<div class="sp-lrow sp-orow" data-url="${esc(r.url)}">
+      <div class="sp-row-cover sp-ocover"><img src="${esc(r.thumbnail || genCover(r.id))}" loading="lazy" /></div>
+      <div class="sp-row-t"><b>${esc(r.title)}</b><span>${esc(r.source === 'SoundCloud' ? 'Song' : 'Video')} • ${esc(r.channel || r.source)}${r.duration ? ' • ' + fmtTime(r.duration) : ''}</span></div>
+      <button class="sp-obtn"></button>
+    </div>`);
+    const paint = () => {
+      const s = onlineState(r), b = $('.sp-obtn', el);
+      b.className = 'sp-obtn ' + s.st;
+      b.innerHTML = s.st === 'have' ? icon('dl', 24) : s.st === 'busy' ? `<span class="sp-oring" style="--p:${Math.round(s.p)}%"></span>` : s.st === 'error' ? icon('refresh', 22) : icon('dlOutline', 26);
+    };
+    paint();
+    el._paint = paint;
+    el.onclick = () => {
+      const s = onlineState(r);
+      if (s.st === 'have') return playIds({ key: 'search', name: 'Search' }, [s.t.id]);
+      if (s.st === 'busy') return UI.toast('Downloading…');
+      SpotUI.sheet([
+        { icon: 'note', round: true, label: 'Download song', sub: 'Audio only (M4A), smallest file', action: () => downloadOnline(r, 'audio-m4a', el) },
+        { icon: 'video', round: true, label: 'Download video', sub: 'Best quality MP4 with sound', action: () => downloadOnline(r, 'video-best', el) },
+        { icon: 'play', round: true, label: 'Preview', sub: `Watch or listen on ${r.source} first`, action: () => { searchMode = false; App.go('discover', searchQ); } },
+      ], { head: `<div class="sp-sh-track"><div class="sp-sh-cover sp-ocover"><img src="${esc(r.thumbnail || '')}" /></div><div><b>${esc(r.title)}</b><span>${esc(r.channel || r.source)}${r.duration ? ' • ' + fmtTime(r.duration) : ''}</span></div></div>` });
+    };
+    return el;
+  }
+  async function downloadOnline(r, format, el) {
+    try {
+      const jobs = await native.dl.add({ url: r.url, format, dir: State.settings().downloadDir, playlist: false, addToLibrary: true });
+      if (jobs[0]) dlByUrl.set(r.url, jobs[0]);
+      addRecentSearch({ k: 'q', v: searchQ.trim() });
+      UI.toast(`Downloading "${r.title}"`);
+      SpotUI.haptic('medium');
+      el && el._paint && el._paint();
+    } catch (e) { UI.toast(String(e.message || e)); }
+  }
+  // keep download progress on the rows up to date
+  native.dl.onJob && native.dl.onJob((j) => {
+    for (const [url, cur] of dlByUrl) if (cur.id === j.id) dlByUrl.set(url, j);
+    $$('.sp-orow').forEach((row) => row._paint && row._paint());
+  });
+  native.dl.onFile && native.dl.onFile(() => setTimeout(() => $$('.sp-orow').forEach((row) => row._paint && row._paint()), 300));
+
   function resultRow(r, ts, q) {
     if (r.kind === 'track') {
       const t = r.t;
