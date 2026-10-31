@@ -480,7 +480,7 @@ body.sp-np-open .sp-np { transform: none; }
 .sp-ly-ctrls .sp-np-play { width: 60px; height: 60px; border-radius: 50%; border: 0; background: #fff; color: #000; display: grid; place-items: center; }
 
 /* classic pages opened from the new layout: fit under the back button */
-body.spot .view-settings, body.spot .view-store, body.spot .view-downloader, body.spot .view-discover, body.spot .view-friends, body.spot .view-friendlib, body.spot .view-together, body.spot .view-account, body.spot .view-transfer { padding-top: 56px !important; }
+body.spot .view-settings, body.spot .view-store, body.spot .view-downloader, body.spot .view-discover, body.spot .view-friends, body.spot .view-friendlib, body.spot .view-together, body.spot .view-account, body.spot .view-transfer, body.spot .view-identify { padding-top: 56px !important; }
 body.spot .toast, body.spot .toast-wrap { bottom: calc(var(--sp-tabs-h) + var(--sp-mini-h) + var(--sa-bottom) + 18px) !important; }
 body.is-ios .view-settings section:has(.s-dc) { display: none !important; }
 
@@ -505,3 +505,26 @@ body.is-ios .view-settings section:has(.s-dc) { display: none !important; }
 .sp-files-head b { display: block; font-size: 18px; }
 .sp-files-head span { font-size: 13px; color: var(--sp-sub); }
 .sp-bigplay.sm { width: 46px; height: 46px; }
+
+/* creating playlists */
+.sp-namer .sp-sheet-card { padding-bottom: calc(var(--sa-bottom) + 20px); }
+.sp-name-form { padding: 6px 22px 6px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; }
+.sp-name-form h2 { margin: 6px 0 0; font-size: 22px; font-weight: 800; }
+.sp-name-in { width: 100%; height: 56px; border: 0; border-bottom: 2px solid #fff; background: transparent; color: #fff; font-size: 28px; font-weight: 800; text-align: center; outline: none; border-radius: 0; }
+.sp-name-form p { margin: 0; color: var(--sp-sub); font-size: 14px; }
+.sp-name-btns { display: flex; gap: 12px; margin-top: 6px; }
+.sp-name-btns .sp-pill { min-width: 120px; height: 44px; border-radius: 22px; font-size: 15px; }
+.sp-picker .sp-sheet-card { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.sp-picker .sp-sheet-items { flex: 1; overflow-y: auto; padding: 0 16px calc(var(--sa-bottom) + 20px); }
+.sp-pick-top { padding: 0 16px 8px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.sp-pick-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sp-pick-head b { display: block; font-size: 20px; font-weight: 800; }
+.sp-pick-head span { font-size: 13px; color: var(--sp-sub); }
+.sp-pick-tabs { margin: 10px 0 6px; }
+.sp-pick-count { font-size: 12.5px; color: var(--sp-green); font-weight: 600; }
+.sp-pick-list .sp-row { cursor: pointer; }
+.sp-mk-art { display: grid !important; place-items: center; background: #2a2a2a; color: #b3b3b3; }
+.sp-mkpl .sp-row-t b { font-weight: 700; }
+.sp-newpl .sp-card-cover { aspect-ratio: 1; border-radius: 4px; }
+.sp-pl-tools { display: flex; gap: 8px; margin: 6px 0 4px; flex-wrap: wrap; }
+.sp-pl-tools .sp-pill { display: inline-flex; align-items: center; gap: 6px; }

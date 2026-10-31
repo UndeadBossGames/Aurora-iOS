@@ -286,7 +286,9 @@ const SpotViews = (() => {
 
       // Your playlists
       const pls = State.playlists();
-      root.appendChild(shelf('Your playlists', pls.map((p) => card({ title: p.name, sub: esc(SpotUI.me().name), src: State.playlistCover(p), onOpen: keyOpen('pl:' + p.id) }))));
+      const newCard = html(`<button class="sp-card sp-newpl"><div class="sp-card-art"><span class="sp-card-cover sp-mk-art">${icon('plusBig', 46)}</span></div><b class="sp-card-title">New playlist</b><span class="sp-card-sub">Add your downloaded songs</span></button>`);
+      newCard.onclick = () => createPlaylist();
+      root.appendChild(shelf('Your playlists', [...pls.map((p) => card({ title: p.name, sub: esc(SpotUI.me().name), src: State.playlistCover(p), onOpen: keyOpen('pl:' + p.id) })), newCard]));
 
       // a video, big
       if (!music) { const v = all.filter(isVid).sort((a, b) => b.addedAt - a.addedAt)[0]; if (v) root.appendChild(videoHero(v)); }
@@ -349,7 +351,8 @@ const SpotViews = (() => {
     render(root, query) {
       if (query) { searchMode = true; searchQ = String(query); }
       if (searchMode) return renderSearchMode(root);
-      root.appendChild(header('Search', `<button class="sp-icon-btn sp-cam">${icon('camera', 26)}</button>`));
+      root.appendChild(header('Search', `<button class="sp-icon-btn sp-ident" title="Identify a song">${icon('identify', 26)}</button><button class="sp-icon-btn sp-cam">${icon('camera', 26)}</button>`));
+      $('.sp-ident', root).onclick = () => App.go('identify');
       $('.sp-cam', root).onclick = () => App.go('downloader');
       const box = html(`<button class="sp-searchbox">${icon('search', 24)}<span>What do you want to listen to?</span></button>`);
       box.onclick = () => focusSearch();
@@ -624,6 +627,12 @@ const SpotViews = (() => {
         es.sort((a, b) => (b.pinned - a.pinned) || cmp(a, b));
         list.className = 'sp-llist ' + (grid ? 'grid' : '');
         list.innerHTML = '';
+        if (!q && (!filter || filter === 'playlist')) {
+          const mk = html(grid ? `<button class="sp-lgrid sp-mkpl"><span class="sp-lg-cover sp-mk-art">${icon('plusBig', 40)}</span><b>Create playlist</b><span>Add your songs</span></button>`
+            : `<button class="sp-lrow sp-mkpl"><span class="sp-lcover sp-mk-art">${icon('plusBig', 30)}</span><div class="sp-row-t"><b>Create playlist</b><span>Name it, then add your downloaded songs</span></div></button>`);
+          mk.onclick = () => createPlaylist();
+          list.appendChild(mk);
+        }
         if (!es.length) { list.appendChild(html(`<div class="sp-noresults"><b>Nothing here yet</b><span>${q ? 'Try another name.' : 'Download or add music to see it here.'}</span></div>`)); return; }
         for (const e of es) {
           const playing = Player.isCurrentContext(e.key);
@@ -761,6 +770,13 @@ const SpotViews = (() => {
           <div class="sp-ca-right"><button class="sp-icon-btn sp-ca-shuf ${Player.P.shuffle ? 'on' : ''}">${icon('shuffle', 28)}</button><button class="sp-bigplay" data-key="${esc(key)}">${icon(playingHere() ? 'pause' : 'play', 26)}</button></div>
         </div>
       </div>`);
+      if (pl) {
+        const bar = html(`<div class="sp-pl-tools"><button class="sp-pill white sm sp-pl-add">${icon('plus', 16)} Add songs</button><button class="sp-pill sm sp-pl-edit">${icon('edit', 14)} Edit</button><button class="sp-pill sm sp-pl-sort">${icon('sortArrows', 14)} Sort</button></div>`);
+        $('.sp-pl-add', bar).onclick = () => addSongs(pl);
+        $('.sp-pl-edit', bar).onclick = () => App.collectionMenu(key, innerWidth / 2, 200);
+        $('.sp-pl-sort', bar).onclick = () => $('.sp-sortbtn', head).click();
+        head.appendChild(bar);
+      }
       root.appendChild(head);
       SpotUI.colorOf(SpotUI.firstSrc(c.cover)).then((col) => { head.style.setProperty('--hc', col); });
       const list = html('<div class="sp-list sp-coll-list"></div>');
@@ -780,7 +796,7 @@ const SpotViews = (() => {
         const its = sorted();
         const order = its.map((i) => i.track.id);
         if (!c.items.length) {
-          list.appendChild(html(`<div class="sp-empty small"><b>Let's start building your ${c.type.toLowerCase()}</b>${pl ? '<button class="sp-pill white sp-addsongs">Add to this playlist</button>' : ''}</div>`));
+          list.appendChild(html(`<div class="sp-empty small"><b>Let's start building your ${c.type.toLowerCase()}</b>${pl ? '<span>Pick songs and videos you downloaded.</span><button class="sp-pill white sp-addsongs">Add songs</button>' : ''}</div>`));
           const b = $('.sp-addsongs', list); if (b) b.onclick = () => addSongs(pl);
         }
         its.forEach((i, n) => list.appendChild(row(i.track, { playlistId: pl && pl.id, num: c.type === 'Album' ? n + 1 : 0, noCover: c.type === 'Album', play: () => playIds(ctx, order, n) })));
@@ -824,27 +840,91 @@ const SpotViews = (() => {
     live: false,
   };
   // pick songs from your library to add to a playlist
-  function addSongs(pl) {
-    const have = new Set(pl.items.map((i) => i.id));
-    const all = tracks().filter((t) => !have.has(t.id)).sort((a, b) => b.addedAt - a.addedAt);
-    const el = SpotUI.sheet([], { title: `Add to ${pl.name}`, cls: 'tall sp-picker' });
+  // ---------- creating playlists and adding songs ----------
+  // 1) name it  2) it opens, with the song picker on top so you can add your downloads right away
+  function createPlaylist({ trackIds = [], open = true, then } = {}) {
+    const n = State.playlists().length + 1;
+    const el = SpotUI.sheet([], { cls: 'sp-namer' });
     const box = $('.sp-sheet-items', el);
-    box.appendChild(html(`<div class="sp-sinput sp-pick-find">${icon('search', 18)}<input type="search" placeholder="Search your songs" /></div>`));
-    const lst = html('<div></div>');
+    box.appendChild(html(`<div class="sp-name-form">
+      <h2>Give your playlist a name</h2>
+      <input class="sp-name-in" maxlength="80" value="My playlist #${n}" enterkeyhint="done" />
+      ${trackIds.length ? `<p>${plural(trackIds.length, 'song')} will be added</p>` : '<p>Next, pick songs from your downloads</p>'}
+      <div class="sp-name-btns"><button class="sp-pill sp-name-cancel">Cancel</button><button class="sp-pill white sp-name-ok">Create</button></div>
+    </div>`));
+    const input = $('.sp-name-in', box);
+    setTimeout(() => { input.focus(); input.select(); }, 280);
+    const go = () => {
+      const name = input.value.trim() || `My playlist #${n}`;
+      const pl = State.createPlaylist({ name, trackIds });
+      SpotUI.closeSheet();
+      SpotUI.haptic('medium');
+      UI.toast(trackIds.length ? `Created "${name}" with ${plural(trackIds.length, 'song')}` : `Created "${name}"`);
+      if (then) then(pl);
+      if (open) {
+        App.go('collection', 'pl:' + pl.id);
+        if (!trackIds.length) setTimeout(() => addSongs(State.playlist(pl.id)), 380);
+      }
+    };
+    $('.sp-name-ok', box).onclick = go;
+    $('.sp-name-cancel', box).onclick = () => SpotUI.closeSheet();
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+  }
+
+  // the song picker: every song and video in your library, newest first; tap to add (tap again to take it out)
+  function addSongs(pl) {
+    if (!pl) return;
+    pl = State.playlist(pl.id) || pl;
+    const inPl = () => new Set((State.playlist(pl.id) || pl).items.map((i) => i.id));
+    let have = inPl();
+    let tab = 'all', q = '';
+    const el = SpotUI.sheet([], { cls: 'tall sp-picker' });
+    const card = $('.sp-sheet-card', el);
+    const box = $('.sp-sheet-items', el);
+    const top = html(`<div class="sp-pick-top">
+      <div class="sp-pick-head"><div><b>Add songs</b><span>to ${esc(pl.name)}</span></div><button class="sp-pill white sm sp-pick-done">Done</button></div>
+      <div class="sp-sinput sp-pick-find">${icon('search', 18)}<input type="search" placeholder="Search your songs and videos" /></div>
+      <div class="sp-chips sp-pick-tabs"><button class="sp-chip on" data-t="all">All</button><button class="sp-chip" data-t="songs">Songs</button><button class="sp-chip" data-t="videos">Videos</button><button class="sp-chip" data-t="liked">Favorites</button></div>
+      <div class="sp-pick-count"></div>
+    </div>`);
+    card.insertBefore(top, box);
+    const lst = html('<div class="sp-pick-list"></div>');
     box.appendChild(lst);
-    const draw = (q = '') => {
+    const count = () => { const added = [...inPl()].length; $('.sp-pick-count', top).textContent = `${plural(added, 'song')} in this playlist`; };
+    const draw = () => {
       lst.innerHTML = '';
-      for (const t of all.filter((x) => !q || `${x.title} ${x.artist}`.toLowerCase().includes(q)).slice(0, 150)) {
-        const r = row(t, { dots: false, sub: esc(t.artist), play: () => {} });
-        const b = html(`<button class="sp-row-add">${icon(have.has(t.id) ? 'addedCircle' : 'addCircle', 24)}</button>`);
-        if (have.has(t.id)) b.classList.add('on');
-        b.onclick = (e) => { e.stopPropagation(); if (have.has(t.id)) return; State.addToPlaylist(pl.id, [t.id]); have.add(t.id); b.innerHTML = icon('addedCircle', 24); b.classList.add('on'); SpotUI.haptic('medium'); };
-        r.onclick = (e) => { if (!e.target.closest('.sp-row-add')) b.click(); };
+      let all = tracks().slice().sort((a, b) => b.addedAt - a.addedAt);
+      if (tab === 'songs') all = all.filter((t) => !isVid(t));
+      if (tab === 'videos') all = all.filter(isVid);
+      if (tab === 'liked') all = all.filter((t) => State.isLiked(t.id));
+      if (q) all = all.filter((x) => `${x.title} ${x.artist} ${x.album || ''}`.toLowerCase().includes(q));
+      if (!all.length) {
+        const empty = html(`<div class="sp-noresults small"><b>${tracks().length ? 'No matches' : 'No downloads yet'}</b><span>${tracks().length ? 'Try another word or tab.' : 'Download songs from the Search tab first, then add them here.'}</span>${tracks().length ? '' : '<button class="sp-pill white sm sp-pick-dl">Find songs to download</button>'}</div>`);
+        const b = $('.sp-pick-dl', empty); if (b) b.onclick = () => { SpotUI.closeSheet(); App.go('search'); setTimeout(() => focusSearch(''), 120); };
+        lst.appendChild(empty);
+        return;
+      }
+      for (const t of all.slice(0, 300)) {
+        const r = row(t, { dots: false, play: () => {} });
+        const b = html(`<button class="sp-row-add ${have.has(t.id) ? 'on' : ''}">${icon(have.has(t.id) ? 'addedCircle' : 'addCircle', 26)}</button>`);
+        const toggle = () => {
+          if (have.has(t.id)) { State.removeFromPlaylist(pl.id, t.id); have.delete(t.id); }
+          else { State.addToPlaylist(pl.id, [t.id]); have.add(t.id); }
+          const on = have.has(t.id);
+          b.classList.toggle('on', on); b.innerHTML = icon(on ? 'addedCircle' : 'addCircle', 26);
+          SpotUI.haptic(on ? 'medium' : 'light');
+          count();
+        };
+        b.onclick = (e) => { e.stopPropagation(); toggle(); };
+        r.onclick = (e) => { e.stopPropagation(); toggle(); };
         r.appendChild(b);
         lst.appendChild(r);
       }
     };
-    $('input', box).addEventListener('input', (e) => draw(e.target.value.toLowerCase()));
+    $('input', top).addEventListener('input', (e) => { q = e.target.value.toLowerCase(); draw(); });
+    $$('.sp-pick-tabs .sp-chip', top).forEach((c) => c.onclick = () => { tab = c.dataset.t; $$('.sp-pick-tabs .sp-chip', top).forEach((x) => x.classList.toggle('on', x === c)); draw(); });
+    $('.sp-pick-done', top).onclick = () => { SpotUI.closeSheet(); const n = inPl().size; UI.toast(`${pl.name}: ${plural(n, 'song')}`); };
+    count();
     draw();
   }
 
@@ -1020,5 +1100,5 @@ const SpotViews = (() => {
     Player.on('state', markPlaying);
   }
 
-  return { install, focusSearch, playRadio, albums, topArtists, artistCover, updates, collectionSheet, mixIds, related, row };
+  return { install, createPlaylist, addSongs, focusSearch, playRadio, albums, topArtists, artistCover, updates, collectionSheet, mixIds, related, row };
 })();

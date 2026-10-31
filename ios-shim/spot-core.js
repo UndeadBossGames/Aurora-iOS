@@ -169,7 +169,7 @@ const SpotUI = (() => {
   function playlistPicker(ids) {
     const pls = State.playlists();
     sheet([
-      { icon: 'plus', label: 'New playlist', round: true, action: () => { const pl = State.createPlaylist({ trackIds: ids }); UI.toast(`Added to ${pl.name}`); } },
+      { icon: 'plus', label: 'New playlist', round: true, action: () => SpotViews.createPlaylist({ trackIds: ids, open: false }) },
       ...pls.map((p) => ({ iconHtml: cover(State.playlistCover(p), 'sp-si-cover'), label: p.name, sub: plural(p.items.length, 'song'), action: () => { const n = State.addToPlaylist(p.id, ids); UI.toast(n ? `Added to ${p.name}` : `Already in ${p.name}`); } })),
     ], { title: 'Add to playlist', cls: 'tall' });
   }
@@ -186,7 +186,8 @@ const SpotUI = (() => {
   function createSheet() {
     haptic('light');
     sheet([
-      { icon: 'note', round: true, label: 'Playlist', sub: 'Create a playlist with songs or videos', action: () => App.newPlaylist() },
+      { icon: 'note', round: true, label: 'Playlist', sub: 'Name it, then add your downloaded songs', action: () => SpotViews.createPlaylist() },
+      { icon: 'identify', round: true, label: 'Identify a song', sub: "Hear something? Find out what it is and download it", action: () => App.go('identify') },
       { icon: 'together', round: true, label: 'Listen Together', sub: 'Listen together from anywhere', action: () => App.go('together') },
       { icon: 'download', round: true, label: 'Download', sub: 'Save a song or video from a link', action: () => App.go('downloader') },
       { icon: 'folderPlus', round: true, label: 'Add from Files', sub: 'Import music and videos from your iPhone', action: () => App.importFiles() },
@@ -214,6 +215,7 @@ const SpotUI = (() => {
           <button class="sp-dr-me">${avatar(52)}<div><b>${esc(p.name)}</b><span>View profile</span></div></button>
           <button class="sp-dr-add"><span class="sp-dr-plus">${icon('plus', 20)}</span><div><b>Add profile</b><span>Add a profile for someone else</span></div></button>
         </div>
+        <button class="sp-dr-item" data-a="identify">${icon('identify', 24)}<span>Identify a song</span></button>
         <button class="sp-dr-item" data-a="stats">${icon('stats', 24)}<span>Listening stats</span></button>
         <button class="sp-dr-item" data-a="recents">${icon('history', 24)}<span>Recents</span></button>
         <button class="sp-dr-item" data-a="updates">${icon('megaphone', 24)}<span>Your Updates</span>${upd ? '<i class="sp-dot"></i>' : ''}</button>
@@ -231,7 +233,7 @@ const SpotUI = (() => {
     $('.sp-dr-me', d).onclick = () => go(() => App.go('profile'));
     $('.sp-dr-add', d).onclick = () => go(() => App.showProfilePicker());
     $$('[data-a]', d).forEach((b) => b.onclick = () => go(() => ({
-      stats: () => App.go('spstats'), recents: () => App.go('sprecents'), updates: () => SpotViews.updates(),
+      identify: () => App.go('identify'), stats: () => App.go('spstats'), recents: () => App.go('sprecents'), updates: () => SpotViews.updates(),
       account: () => App.go('account'), settings: () => App.go('settings'), friends: () => App.go('friends'),
       addfriend: () => App.go('friends'), together: () => App.go('together'),
     })[b.dataset.a]()));
@@ -305,6 +307,8 @@ const SpotUI = (() => {
     };
     const back = App.back;
     App.back = () => { closeSheet(); closeDrawer(); back(); renderTabs(); renderBack(); };
+    // every "new playlist" button: name it, then add songs
+    App.newPlaylist = () => SpotViews.createPlaylist();
     // song menus become bottom sheets
     UI.trackMenu = (t, _x, _y, ctx) => trackSheet(t, ctx || {});
     // swipe from the left edge on a tab's first page opens the side menu; tap outside closes it
