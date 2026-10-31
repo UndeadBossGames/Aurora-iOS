@@ -125,7 +125,7 @@
 
   let toolsCache = null;
   const dl = {
-    async add({ url, format = 'video-best', playlist = false, addToLibrary = true }) {
+    async add({ url, format = 'video-best', playlist = false, addToLibrary = true, meta = null }) {
       url = String(url || '').trim();
       if (!url) throw new Error('Paste a link first');
       if (!/^https?:\/\//i.test(url) && !/^(yt|sc)search\d*:/i.test(url)) url = 'ytsearch1:' + url;
@@ -137,7 +137,7 @@
           created.push(createJob({ url: `ytsearch1:${t.artist ? t.artist + ' - ' : ''}${t.title} audio`, displayUrl: url, title: `${t.artist ? t.artist + ' - ' : ''}${t.title}`, source: 'Spotify', format: fmt, playlist: false, addToLibrary, meta: t }));
         }
       } else {
-        created.push(createJob({ url, displayUrl: url, title: url.replace(/^ytsearch1:/, 'Search: '), source: sourceName(url), format, playlist, addToLibrary }));
+        created.push(createJob({ url, displayUrl: url, title: meta && meta.title ? `${meta.artist ? meta.artist + ' - ' : ''}${meta.title}` : url.replace(/^ytsearch1:/, 'Search: '), source: sourceName(url), format, playlist, addToLibrary, meta: meta || undefined }));
       }
       pump();
       return created.map(pub);

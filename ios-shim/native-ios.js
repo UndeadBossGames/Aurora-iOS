@@ -276,6 +276,20 @@
       openPath: async () => window.UI && UI.toast('Open the Files app → On My iPhone → Aurora to see your files.', 5000),
       openExternal: async (url) => { if (/^https?:/i.test(url)) window.open(url, '_blank'); },
     },
+    // song recognition (AudD), sent natively so the service doesn't have to allow web pages
+    identify: {
+      systemAudio: false,
+      async recognize({ b64, mime, token }) {
+        const body = new URLSearchParams({ api_token: token || 'test', return: 'apple_music,spotify,deezer', audio: b64 }).toString();
+        if (Http) {
+          const r = await Http.post({ url: 'https://api.audd.io/', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, data: body });
+          if (r.status >= 400) throw new Error('The recognition service answered ' + r.status);
+          return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+        }
+        const r = await fetch('https://api.audd.io/', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+        return r.json();
+      },
+    },
     art: {
       async lookup(title, artist) {
         const q = [artist, title].filter((x) => x && !/^unknown artist$/i.test(x)).join(' ').trim();

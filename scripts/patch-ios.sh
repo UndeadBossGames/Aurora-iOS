@@ -17,6 +17,8 @@ $PB -c "Add :UIBackgroundModes:0 string audio" "$PLIST"
 # Play music as plain stereo: ask iOS (18+) not to add its own spatial audio / head tracking,
 # which made the sound drift between ears as the phone moved
 set_key AVGameBypassSystemSpatialAudio bool true
+# Identify a song listens through the microphone
+plutil -replace NSMicrophoneUsageDescription -string "Aurora listens for a few seconds to identify the song playing around you." "$PLIST"
 # Aurora's folder shows up in iTunes/Finder File Sharing and in the Files app
 set_key UIFileSharingEnabled bool true
 set_key LSSupportsOpeningDocumentsInPlace bool true
