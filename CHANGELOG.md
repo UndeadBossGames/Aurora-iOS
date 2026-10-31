@@ -21,6 +21,9 @@ Every version is a git tag. To get an older build, download its .ipa from Releas
 - **Song radio and mixes** made from your own library, plus **Listening stats** (minutes, plays, top artists and songs) and **Recents** by day.
 - Song menus are now bottom sheets: Add to playlist, Favorites, queue, radio, Go to artist or album, Share, Credits, Edit, Delete.
 - **Silent endings are cut automatically** from new downloads, so songs stop when the music stops. Settings → Downloads → Fix now cleans up songs you already have.
+- **Proper cover art**: downloads get the official album cover (from Apple Music's catalog, or Deezer), plus the real song title, artist and album when the match is clear. When there's no official cover, the YouTube thumbnail is cleaned up: black bars and channel logos are cut off, and video frames are placed on a blurred square background. The lock screen, Control Center and every tile now show a clean square picture. Songs already in your library are fixed automatically in the background.
+- **Search for any song from the Search tab**: below your own songs, results from YouTube or SoundCloud appear as you type. Tap one to download it as a song or as a video, with progress right on the row.
+- **Tap a song to play it** everywhere (the classic layout needed a double tap).
 - Prefer the old look? Settings → Appearance → iPhone layout → Classic.
 
 ## v1.3.0 — 2026-10-29
