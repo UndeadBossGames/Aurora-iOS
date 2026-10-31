@@ -281,10 +281,23 @@ const SpotPlayer = (() => {
       { icon: 'timer', label: Timer.label() ? `Sleep timer (${Timer.label()})` : 'Sleep timer', action: timerSheet },
       { icon: 'speed', label: `Playback speed (${media().playbackRate || 1}×)`, action: speedSheet },
       { icon: 'devices', label: 'Connect to a device', action: pickDevice },
+      { icon: 'headphones', label: 'Sound moving between ears?', action: spatialHelp },
       { icon: 'share', label: 'Share', action: () => SpotUI.share(t) },
       { icon: 'credits', label: 'View song credits', action: () => credits(t) },
       { icon: 'edit', label: 'Edit details', action: () => UI.editTrackModal(t) },
     ], { head: `<div class="sp-sh-track">${cover(UI.coverSrc(t), 'sp-sh-cover')}<div><b>${esc(t.title)}</b><span>${esc(t.artist)}</span></div></div>` });
+  }
+  // iOS "Spatialize Stereo" with head tracking moves the sound as you turn your head or the phone
+  function spatialHelp() {
+    UI.modal({
+      title: 'Sound moving between your ears?',
+      body: `<div class="m-help">
+        <p>That's iOS <b>Spatial Audio with head tracking</b>: it places the music "in front of" your iPhone, so when the phone or your head moves, the sound shifts to one ear.</p>
+        <p><b>Turn it off for Aurora:</b> with your AirPods connected and music playing, open <b>Control Center</b>, press and hold the <b>volume slider</b>, tap <b>Spatial Audio</b> (or Spatialize Stereo) and choose <b>Off</b> (or <b>Fixed</b>). iPhone remembers this for Aurora.</p>
+        <p>Also check <b>Settings → Accessibility → AirPods → Spatial Audio Head Tracking</b>: turn off <b>Follow iPhone</b> so the sound doesn't follow the phone's position.</p>
+      </div>`,
+      actions: [{ label: 'Got it', primary: true }],
+    });
   }
   function speedSheet() {
     const cur = media().playbackRate || 1;
