@@ -24,6 +24,8 @@ Every version is a git tag. To get an older build, download its .ipa from Releas
 - **Proper cover art**: downloads get the official album cover (from Apple Music's catalog, or Deezer), plus the real song title, artist and album when the match is clear. When there's no official cover, the YouTube thumbnail is cleaned up: black bars and channel logos are cut off, and video frames are placed on a blurred square background. The lock screen, Control Center and every tile now show a clean square picture. Songs already in your library are fixed automatically in the background.
 - **Search for any song from the Search tab**: below your own songs, results from YouTube or SoundCloud appear as you type. Tap one to download it as a song or as a video, with progress right on the row.
 - **Tap a song to play it** everywhere (the classic layout needed a double tap).
+- **Music keeps playing when you leave the app** or lock your iPhone, including music videos (iOS used to pause them). Lock screen and headphone controls (play/pause, next, previous, seek) keep working, songs keep advancing through the playlist, and the app picks up at the same spot when you come back.
+- **Shuffle never repeats a song** within a round, not even a second copy of the same song. Turning shuffle on halfway only plays songs you haven't heard yet. With Repeat on, a new shuffled round starts, never with the song that just ended. With Repeat off, playback stops after every song has played once.
 - Prefer the old look? Settings → Appearance → iPhone layout → Classic.
 
 ## v1.3.0 — 2026-10-29
