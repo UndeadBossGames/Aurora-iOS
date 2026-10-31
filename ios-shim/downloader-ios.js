@@ -8,11 +8,11 @@
   const Http = (Cap.Plugins || {}).CapacitorHttp;
   const MAX_PARALLEL = 5;
   const FORMATS = {
-    'video-best': { label: 'Video · Best quality (MP4)', kind: 'video' },
-    'video-1080': { label: 'Video · 1080p (MP4)', kind: 'video' },
-    'video-720': { label: 'Video · 720p (MP4)', kind: 'video' },
-    'audio-mp3': { label: 'Audio · Best (M4A/MP3)', kind: 'audio' },
-    'audio-m4a': { label: 'Audio · M4A', kind: 'audio' },
+    'video-best': { label: 'Video · best quality (.mp4)', kind: 'video' },
+    'video-1080': { label: 'Video · 1080p (.mp4)', kind: 'video' },
+    'video-720': { label: 'Video · 720p (.mp4)', kind: 'video' },
+    'audio-mp3': { label: 'Song · best audio (.m4a)', kind: 'audio' },
+    'audio-m4a': { label: 'Song · audio only (.m4a)', kind: 'audio' },
   };
   const jobs = new Map();
   const queue = [];
@@ -81,7 +81,7 @@
       j.statusText = 'Starting…';
       emitJob(j);
       if (!plugin) return fail(j, 'The download engine is missing from this build.');
-      plugin.start({ job: { id: j.id, url: j.url, format: j.format, playlist: j.playlist, dir: 'Music/Downloads', meta: j.meta || null, source: j.source, trimSilence: !(window.State && State.settings().trimSilence === false) } })
+      plugin.start({ job: { id: j.id, url: j.url, format: j.format, playlist: j.playlist, dir: String(j.format).startsWith('audio') ? 'Music/Downloads/Songs' : 'Music/Downloads/Videos', meta: j.meta || null, source: j.source, trimSilence: !(window.State && State.settings().trimSilence === false) } })
         .then((r) => { const res = parse(r); if (res && res.ok === false) fail(j, res.error || 'Could not start'); })
         .catch((e) => fail(j, e.message || String(e)));
     });

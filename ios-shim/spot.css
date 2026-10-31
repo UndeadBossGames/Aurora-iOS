@@ -497,3 +497,11 @@ body.is-ios .view-settings section:has(.s-dc) { display: none !important; }
 .sp-obtn.error { color: #ff8b8b; }
 .sp-oring { width: 24px; height: 24px; border-radius: 50%; background: conic-gradient(var(--sp-green) var(--p, 0%), rgba(255, 255, 255, .2) 0); -webkit-mask: radial-gradient(circle, transparent 8px, #000 8.5px); mask: radial-gradient(circle, transparent 8px, #000 8.5px); }
 .sp-cancel { flex: none; white-space: nowrap; }
+
+/* file type tags and the Songs / Videos lists */
+.sp-tag.aud { background: #1ed760; color: #000; }
+.sp-tag.vid { background: #7db6ff; color: #000; }
+.sp-files-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 10px; }
+.sp-files-head b { display: block; font-size: 18px; }
+.sp-files-head span { font-size: 13px; color: var(--sp-sub); }
+.sp-bigplay.sm { width: 46px; height: 46px; }

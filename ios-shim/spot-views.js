@@ -3,6 +3,7 @@
 const SpotViews = (() => {
   const { cover, plural } = SpotUI;
   const NOT_ALBUMS = /^(downloads|spotify downloads|youtube|soundcloud|generic|vimeo|tiktok|twitter|instagram|bandcamp|web|unknown album|from friends)$/i;
+  const isVidT = (t) => t.kind === 'video';
   const realAlbum = (t) => t.album && !NOT_ALBUMS.test(t.album.trim()) ? t.album : null;
   const albumKey = (artist, album) => 'album:' + artist + '\u0001' + album;
   const MIX_COLORS = ['#7d5bff', '#ff5a5f', '#ff9f1c', '#2ec4b6', '#e84393', '#1ed760', '#4dabf7', '#f7b801', '#c77dff', '#ff6b6b'];
@@ -39,6 +40,10 @@ const SpotViews = (() => {
       if (!items.length) return null;
       const cv = items.find((i) => i.track.cover);
       return { key, type: 'Album', name, owner: artist, editable: false, cover: cv ? native.fileUrl(cv.track.cover) : genCover(name, '', 'music'), items };
+    }
+    if (key === 'songs') {
+      const items = tracks().filter((t) => !isVidT(t)).sort((a, b) => b.addedAt - a.addedAt).map((t) => ({ track: t, addedAt: t.addedAt }));
+      return { key, type: 'Playlist', name: 'Songs', owner: 'Aurora', editable: false, description: 'Every song (audio file: .mp3, .m4a…) in your library.', cover: genCover('songs', '', 'music'), items };
     }
     if (key && key.startsWith('mix:')) {
       const name = key.slice(4);
@@ -124,7 +129,7 @@ const SpotViews = (() => {
     const el = html(`<div class="sp-row ${playing ? 'playing' : ''}" data-id="${esc(t.id)}">
       ${opts.num ? `<span class="sp-num">${opts.num}</span>` : ''}
       ${opts.noCover ? '' : cover(UI.coverSrc(t), 'sp-row-cover')}
-      <div class="sp-row-t"><b>${esc(t.title)}</b><span>${opts.sub !== undefined ? opts.sub : `<i class="sp-dl">${icon('dl', 13)}</i>${isVid(t) ? '<em class="sp-tag">VIDEO</em>' : ''}${esc(opts.type ? `${opts.type} • ${t.artist}` : t.artist)}`}</span></div>
+      <div class="sp-row-t"><b>${esc(t.title)}</b><span>${opts.sub !== undefined ? opts.sub : `<i class="sp-dl">${icon('dl', 13)}</i>${typeTag(t)}${esc(opts.type ? `${opts.type} • ${t.artist}` : t.artist)}`}</span></div>
       ${opts.add ? `<button class="sp-row-add">${icon(State.isLiked(t.id) ? 'addedCircle' : 'addCircle', 24)}</button>` : ''}
       ${opts.remove ? `<button class="sp-row-x">${icon('close', 20)}</button>` : ''}
       ${opts.dots === false ? '' : `<button class="sp-row-dots">${icon('dotsH', 20)}</button>`}
@@ -142,6 +147,9 @@ const SpotViews = (() => {
     return el;
   }
   const isVid = (t) => t.kind === 'video';
+  // the file type, e.g. MP4 (video) or M4A / MP3 (song)
+  const extOf = (t) => (String(t.path || '').match(/\.([a-z0-9]{2,4})$/i) || [, isVid(t) ? 'mp4' : 'm4a'])[1].toLowerCase();
+  const typeTag = (t) => `<em class="sp-tag ${isVid(t) ? 'vid' : 'aud'}">${esc(extOf(t).toUpperCase())}</em>`;
 
   // swipe a song to the right to add it to the queue
   function swipeToQueue(el, t) {
@@ -503,8 +511,8 @@ const SpotViews = (() => {
       if (s.st === 'have') return playIds({ key: 'search', name: 'Search' }, [s.t.id]);
       if (s.st === 'busy') return UI.toast('Downloading…');
       SpotUI.sheet([
-        { icon: 'note', round: true, label: 'Download song', sub: 'Audio only (M4A), smallest file', action: () => downloadOnline(r, 'audio-m4a', el) },
-        { icon: 'video', round: true, label: 'Download video', sub: 'Best quality MP4 with sound', action: () => downloadOnline(r, 'video-best', el) },
+        { icon: 'note', round: true, label: 'Download as a song (.m4a)', sub: 'Audio only, saved in Songs', action: () => downloadOnline(r, 'audio-m4a', el) },
+        { icon: 'video', round: true, label: 'Download as a video (.mp4)', sub: 'Best quality with sound, saved in Videos', action: () => downloadOnline(r, 'video-best', el) },
         { icon: 'play', round: true, label: 'Preview', sub: `Watch or listen on ${r.source} first`, action: () => { searchMode = false; App.go('discover', searchQ); } },
       ], { head: `<div class="sp-sh-track"><div class="sp-sh-cover sp-ocover"><img src="${esc(r.thumbnail || '')}" /></div><div><b>${esc(r.title)}</b><span>${esc(r.channel || r.source)}${r.duration ? ' • ' + fmtTime(r.duration) : ''}</span></div></div>` });
     };
@@ -586,10 +594,12 @@ const SpotViews = (() => {
       const list = html('<div class="sp-llist"></div>');
       root.appendChild(list);
       const SORTS = { recents: 'Recents', added: 'Recently added', alpha: 'Alphabetical', creator: 'Creator' };
-      const kinds = [['playlist', 'Playlists'], ['album', 'Albums'], ['artist', 'Artists'], ['download', 'Downloaded'], ['video', 'Videos']];
+      const kinds = [['songs', 'Songs'], ['video', 'Videos'], ['playlist', 'Playlists'], ['album', 'Albums'], ['artist', 'Artists'], ['download', 'Downloaded']];
 
       const entries = () => {
         const out = State.libraryEntries().map((e) => ({ ...e, kind: e.kind === 'download' ? 'playlist' : e.kind }));
+        const songs = tracks().filter((t) => !isVid(t)).length;
+        if (songs) out.push({ key: 'songs', name: 'Songs', sub: `Playlist • ${plural(songs, 'song')}`, cover: genCover('songs', '', 'music'), kind: 'playlist', at: State.lastPlayed('collection', 'songs') || 1, pinned: State.isPinned('songs') });
         for (const a of albums()) out.push({ key: a.key, name: a.name, sub: `Album • ${a.artist}`, cover: a.cover, kind: 'album', at: State.lastPlayed('collection', a.key) || a.addedAt, owner: a.artist, pinned: State.isPinned(a.key) });
         return out;
       };
@@ -604,6 +614,7 @@ const SpotViews = (() => {
         }
         $('.sp-lsort span', bar).textContent = SORTS[sort];
         $('.sp-lview', bar).innerHTML = icon(grid ? 'listLines' : 'grid', 20);
+        if (filter === 'songs' || filter === 'video') return drawFiles(filter === 'video');
         let es = entries();
         if (filter === 'download') es = es.filter((e) => e.key === 'downloads' || e.key === 'local' || e.key.startsWith('pl:') || e.kind === 'album');
         else if (filter === 'video') es = es.filter((e) => e.key === 'videos' || (e.kind === 'artist' && byArtist(e.name).some(isVid)));
@@ -624,6 +635,23 @@ const SpotViews = (() => {
           el._spMenu = () => collectionSheet(e.key);
           list.appendChild(el);
         }
+      };
+      // Songs / Videos: every file of that type, newest first, one tap to play
+      const drawFiles = (videos) => {
+        list.className = 'sp-llist';
+        list.innerHTML = '';
+        let ts = tracks().filter((t) => isVid(t) === videos);
+        if (q) ts = ts.filter((t) => `${t.title} ${t.artist}`.toLowerCase().includes(q));
+        const by = { recents: (a, b) => (State.lastPlayed('track', b.id) - State.lastPlayed('track', a.id)) || b.addedAt - a.addedAt, added: (a, b) => b.addedAt - a.addedAt, alpha: (a, b) => a.title.localeCompare(b.title), creator: (a, b) => a.artist.localeCompare(b.artist) }[sort];
+        ts.sort(by);
+        const exts = {};
+        ts.forEach((t) => { const e = extOf(t).toUpperCase(); exts[e] = (exts[e] || 0) + 1; });
+        const head = html(`<div class="sp-files-head"><div><b>${plural(ts.length, videos ? 'video' : 'song')}</b><span>${Object.entries(exts).map(([e, n]) => `${n} ${e}`).join(' • ') || (videos ? 'MP4 files' : 'MP3 / M4A files')}</span></div><button class="sp-bigplay sm">${icon('play', 22)}</button></div>`);
+        $('.sp-bigplay', head).onclick = () => playIds({ key: videos ? 'videos' : 'songs', name: videos ? 'Videos' : 'Songs' }, ts.map((t) => t.id), Player.P.shuffle ? -1 : 0);
+        list.appendChild(head);
+        if (!ts.length) { list.appendChild(html(`<div class="sp-noresults"><b>No ${videos ? 'videos' : 'songs'} yet</b><span>${videos ? 'Download something as a video (.mp4).' : 'Download something as a song (.m4a / .mp3).'}</span></div>`)); return; }
+        const ids = ts.map((t) => t.id);
+        ts.slice(0, 400).forEach((t, i) => list.appendChild(row(t, { play: () => playIds({ key: videos ? 'videos' : 'songs', name: videos ? 'Videos' : 'Songs' }, ids, i) })));
       };
       $('.sp-lsearch', root).onclick = () => { filt.hidden = !filt.hidden; if (!filt.hidden) $('input', filt).focus(); else { q = ''; $('input', filt).value = ''; draw(); } };
       $('input', filt).addEventListener('input', (e) => { q = e.target.value.toLowerCase(); draw(); });
