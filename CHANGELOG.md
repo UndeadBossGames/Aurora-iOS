@@ -10,6 +10,9 @@ Every version is a git tag. To get an older build, download its .ipa from Releas
   - You name it, then a song picker opens right away with **all your downloads** (All / Songs / Videos / Favorites tabs and search). Tap songs to add them, tap again to take them out, then **Done**
   - Every playlist has a big **Add songs** button (plus Edit and Sort)
   - "Add to playlist" on any song → **New playlist** lets you name it too
+- **A start-up animation**: the Aurora logo draws itself over drifting northern lights, picking up right where the iPhone's launch screen ends
+- **Download queue, touched up**: All / Downloading / Done / Failed tabs with counts, Retry failed, and a **Recently downloaded** list (newest first, grouped by day, with Song/Video, file type, how long ago and one-tap play)
+- **Fixed: the app sometimes flickered.** Background changes (downloads finishing, cover art being fixed, account sync) rebuilt the whole page. Now pages update off-screen and swap in when their pictures are ready, Your Library and playlist pages only redraw when something really changed, and cover-art fixes refresh the screen once per batch instead of once per song
 
 ## v1.4.0 — 2026-10-30
 - **New iPhone layout**, modelled on the standard streaming-app design for iPhone:
