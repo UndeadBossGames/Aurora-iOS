@@ -461,6 +461,9 @@ const SpotPlayer = (() => {
     Player.on('queue', () => { drawQueue(); if (Player.current) renderCards(Player.current); });
     Player.on('mode', syncModes);
     State.on('likes', () => syncTrack(false));
+    // new cover art or names for the song that's playing
+    let sig = '';
+    State.on('library', debounce(() => { const t = Player.current; const k = t ? t.id + t.cover + t.title + t.artist : ''; if (k !== sig) { sig = k; syncTrack(true); } }, 200));
     syncTrack(true); syncState(); syncModes(); paintTime();
     // the classic layer keeps moving the video back; put it where it belongs after any re-render
     new MutationObserver(() => { if (body.classList.contains('sp-np-open') && Player.current && Player.current.kind === 'video' && media().parentNode !== $('.sp-np-video', np)) placeVideo(); }).observe($('#media-host') || document.body, { childList: true });
