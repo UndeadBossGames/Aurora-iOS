@@ -2,6 +2,15 @@
 
 Every version is a git tag. To get an older build, download its .ipa from Releases.
 
+## v1.5.0 — 2026-10-31
+- **Identify a song**: hear music around you? Tap the **Identify** button on the Search page (or Create → Identify a song, or the side menu). Hold your iPhone near the music and Aurora listens for 10 seconds, then shows the song, artist, album and cover. **Download song** (.m4a) or **Download video** (.mp4) in one tap, play it if you already have it, or see more results. Every song you identify is saved in a list. iPhone asks once for the microphone
+- Song recognition uses AudD. A few tries work without a key; for more, add your own free key (300 identifications) in Settings → Downloads → Song recognition
+- **Creating playlists is easy now**:
+  - **Create playlist** sits at the top of Your Library, at the end of "Your playlists" on Home, and first in the Create (+) menu
+  - You name it, then a song picker opens right away with **all your downloads** (All / Songs / Videos / Favorites tabs and search). Tap songs to add them, tap again to take them out, then **Done**
+  - Every playlist has a big **Add songs** button (plus Edit and Sort)
+  - "Add to playlist" on any song → **New playlist** lets you name it too
+
 ## v1.4.0 — 2026-10-30
 - **New iPhone layout**, modelled on the standard streaming-app design for iPhone:
   - **Tab bar** with Home, Search, Your Library, Store and Create (+).
