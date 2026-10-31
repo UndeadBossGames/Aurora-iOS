@@ -132,6 +132,8 @@ const Artwork = (() => {
     return c.toDataURL('image/jpeg', 0.9);
   }
 
+  const emitSoon = debounce(() => State.emit('library'), 1500);
+
   // ---------- fix one song ----------
   const isWeb = (t) => t.source && !['local', 'Friend', 'friend'].includes(t.source);
   async function fix(t, { force = false } = {}) {
@@ -163,7 +165,7 @@ const Artwork = (() => {
     } catch (e) { console.warn('artwork', t.title, e); }
     if (!State.anyTrack(t.id)) return false;
     State.updateTrack(t.id, patch);
-    State.emit('library');
+    emitSoon(); // one refresh for a batch of fixed covers, not one per song
     if (Player.current && Player.current.id === t.id) { try { App.refreshNowPlaying(); } catch {} refreshLockScreen(); }
     return !!patch.cover;
   }

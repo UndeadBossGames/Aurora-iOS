@@ -668,7 +668,12 @@ const SpotViews = (() => {
       $('.sp-lsort', bar).onclick = () => SpotUI.sheet(Object.entries(SORTS).map(([k, l]) => ({ icon: 'sortArrows', label: l, on: k === sort, action: () => { sort = k; State.setPref('spLibSort', k); draw(); } })), { title: 'Sort by' });
       $('.sp-lview', bar).onclick = () => { grid = !grid; State.setPref('spLibView', grid ? 'grid' : 'list'); draw(); };
       draw();
-      const off = State.on('library', debounce(draw, 150));
+      // redraw only when the list would actually change (redrawing everything made it blink)
+      let libSig = '';
+      const off = State.on('library', debounce(() => {
+        const ns = JSON.stringify([filter, sort, grid, q, entries().map((e) => [e.key, e.name, e.sub, e.pinned, typeof e.cover === 'object' ? 1 : e.cover]), tracks().length]);
+        if (ns !== libSig) { libSig = ns; draw(); }
+      }, 250));
       const off2 = Player.on ? null : null;
       return () => { off(); off2 && off2(); };
     },
@@ -834,7 +839,14 @@ const SpotViews = (() => {
       const save = $('.sp-ca-save', head); if (save) save.onclick = () => { State.togglePin(key); save.innerHTML = icon(State.isPinned(key) ? 'addedCircle' : 'addCircle', 28); UI.toast(State.isPinned(key) ? 'Saved to Your Library' : 'Removed from Your Library'); };
       const add = $('.sp-ca-add', head); if (add) add.onclick = () => addSongs(pl);
       const cv = $('.sp-coll-art', head); if (pl) cv.onclick = () => App.collectionMenu(key, innerWidth / 2, 200);
-      const off = State.on('library', debounce(() => { if (App.current && App.current.param === key) App.render(false); }, 200));
+      // refresh only when this page's songs really changed, and without blanking the page
+      let sig = JSON.stringify([c.name, c.description, ids]);
+      const off = State.on('library', debounce(() => {
+        if (!(App.current && App.current.param === key)) return;
+        const n = State.collection(key);
+        const ns = n ? JSON.stringify([n.name, n.description, n.items.map((i) => i.track.id)]) : '';
+        if (ns !== sig) { sig = ns; App.refresh(); }
+      }, 300));
       return () => { off(); };
     },
     live: false,
