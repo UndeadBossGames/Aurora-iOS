@@ -480,13 +480,18 @@ const SpotViews = (() => {
     if (seq !== onlineSeq || !box.isConnected) return;
     let list = onlineCache.get(key);
     if (!list) {
-      try { list = await native.dl.search(q, onlineSource, 10); onlineCache.set(key, list); }
+      try { list = typeof discoverSearch === 'function' ? await discoverSearch(q, onlineSource) : await native.dl.search(q, onlineSource, 10); onlineCache.set(key, list); }
       catch (e) { if (box.isConnected) box.innerHTML = `<div class="sp-noresults small"><span>${esc(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))}</span></div>`; return; }
     }
     if (seq !== onlineSeq || !box.isConnected) return;
     box.innerHTML = '';
     if (!list.length) { box.innerHTML = '<div class="sp-noresults small"><span>Nothing found online.</span></div>'; return; }
-    for (const r of list) box.appendChild(onlineRow(r));
+    // official songs first, then videos
+    const songs = list.filter((r) => r.kind === 'song' || r.source === 'SoundCloud'), vids = list.filter((r) => !songs.includes(r));
+    if (songs.length && vids.length) box.appendChild(html('<div class="sp-osec">Songs</div>'));
+    songs.slice(0, 8).forEach((r) => box.appendChild(onlineRow(r)));
+    if (songs.length && vids.length) box.appendChild(html('<div class="sp-osec">Videos</div>'));
+    vids.slice(0, 10).forEach((r) => box.appendChild(onlineRow(r)));
   }
   function onlineState(r) {
     const have = tracks().find((t) => t.url === r.url);
@@ -499,7 +504,7 @@ const SpotViews = (() => {
   function onlineRow(r) {
     const el = html(`<div class="sp-lrow sp-orow" data-url="${esc(r.url)}">
       <div class="sp-row-cover sp-ocover"><img src="${esc(r.thumbnail || genCover(r.id))}" loading="lazy" /></div>
-      <div class="sp-row-t"><b>${esc(r.title)}</b><span>${esc(r.source === 'SoundCloud' ? 'Song' : 'Video')} • ${esc(r.channel || r.source)}${r.duration ? ' • ' + fmtTime(r.duration) : ''}</span></div>
+      <div class="sp-row-t"><b>${esc(r.title)}</b><span>${esc(r.source === 'SoundCloud' || r.kind === 'song' ? 'Song' : 'Video')} • ${esc((r.channel || '').replace(/ - Topic$/i, '') || r.source)}${r.duration ? ' • ' + fmtTime(r.duration) : ''}</span></div>
       <button class="sp-obtn"></button>
     </div>`);
     const paint = () => {
@@ -523,7 +528,13 @@ const SpotViews = (() => {
   }
   async function downloadOnline(r, format, el) {
     try {
-      const jobs = await native.dl.add({ url: r.url, format, dir: State.settings().downloadDir, playlist: false, addToLibrary: true });
+      let url = r.url;
+      // a music video saved as a song: use the official song instead when there is one
+      if (/^audio/.test(format) && r.source === 'YouTube' && r.kind !== 'song' && typeof discoverOfficialSong === 'function') {
+        const off = await discoverOfficialSong(r.title);
+        if (off) { url = off.url; UI.toast(`Using the official song: ${off.title}`); }
+      }
+      const jobs = await native.dl.add({ url, format, dir: State.settings().downloadDir, playlist: false, addToLibrary: true });
       if (jobs[0]) dlByUrl.set(r.url, jobs[0]);
       addRecentSearch({ k: 'q', v: searchQ.trim() });
       UI.toast(`Downloading "${r.title}"`);

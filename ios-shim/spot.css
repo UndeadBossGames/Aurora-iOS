@@ -528,3 +528,4 @@ body.is-ios .view-settings section:has(.s-dc) { display: none !important; }
 .sp-newpl .sp-card-cover { aspect-ratio: 1; border-radius: 4px; }
 .sp-pl-tools { display: flex; gap: 8px; margin: 6px 0 4px; flex-wrap: wrap; }
 .sp-pl-tools .sp-pill { display: inline-flex; align-items: center; gap: 6px; }
+.sp-osec { font-size: 13px; font-weight: 700; color: var(--sp-sub, #b3b3b3); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
