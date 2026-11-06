@@ -2,6 +2,10 @@
 
 Every version is a git tag. To get an older build, download its .ipa from Releases.
 
+## v1.6.0
+- **Songs first:** online search shows the official songs (from YouTube Music) at the top, then videos, on both the Search tab and Discover.
+- **Official song, not the music video:** saving a music video as a song now downloads the official release when one matches. Identify does the same.
+
 ## v1.5.0 — 2026-10-31
 - **Identify a song**: hear music around you? Tap the **Identify** button on the Search page (or Create → Identify a song, or the side menu). Hold your iPhone near the music and Aurora listens for 10 seconds, then shows the song, artist, album and cover. **Download song** (.m4a) or **Download video** (.mp4) in one tap, play it if you already have it, or see more results. Every song you identify is saved in a list. iPhone asks once for the microphone
 - Song recognition uses AudD. A few tries work without a key; for more, add your own free key (300 identifications) in Settings → Downloads → Song recognition
