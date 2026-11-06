@@ -428,14 +428,19 @@ def search(arg):
     if not q:
         return json.dumps({'ok': True, 'results': []})
     sc = a.get('source') == 'soundcloud'
+    songs = a.get('source') == 'songs'  # YouTube Music "Songs": official audio releases
     n = max(1, min(12 if sc else 30, int(a.get('limit') or 18)))
     logger = _Logger()
     opts = {**_base_opts(logger), 'skip_download': True, 'ignoreerrors': True}
     if not sc:
         opts['extract_flat'] = 'in_playlist'
+    if songs:
+        opts['playlistend'] = n
     try:
+        from urllib.parse import quote
+        target = f'https://music.youtube.com/search?q={quote(q)}#songs' if songs else f"{'scsearch' if sc else 'ytsearch'}{n}:{q}"
         with yt_dlp.YoutubeDL(opts) as ydl:
-            data = ydl.extract_info(f"{'scsearch' if sc else 'ytsearch'}{n}:{q}", download=False)
+            data = ydl.extract_info(target, download=False)
     except Exception as e:
         return json.dumps({'ok': False, 'error': _clean_error(e)})
     out = []
@@ -443,13 +448,14 @@ def search(arg):
         if not e:
             continue
         vid = e.get('id')
-        url = e.get('webpage_url') or e.get('url') or (None if sc else f'https://www.youtube.com/watch?v={vid}')
+        url = (f'https://www.youtube.com/watch?v={vid}' if vid else None) if songs else (e.get('webpage_url') or e.get('url') or (None if sc else f'https://www.youtube.com/watch?v={vid}'))
         thumbs = [t for t in (e.get('thumbnails') or []) if t and t.get('url')]
         thumb = (e.get('thumbnail') or (thumbs[-1]['url'] if thumbs else None)) if sc else f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
         if not url or e.get('live_status') == 'is_live':
             continue
-        out.append({'id': vid, 'url': url, 'source': 'SoundCloud' if sc else 'YouTube', 'title': e.get('title') or e.get('track') or 'Untitled',
-                    'channel': e.get('channel') or e.get('uploader') or e.get('artist') or '', 'duration': float(e.get('duration') or 0),
+        artists = e.get('artists') if isinstance(e.get('artists'), list) else None
+        out.append({'id': vid, 'url': url, 'source': 'SoundCloud' if sc else 'YouTube', 'kind': 'song' if songs else None, 'title': e.get('title') or e.get('track') or 'Untitled',
+                    'channel': (', '.join(artists) if artists else '') or e.get('artist') or e.get('channel') or e.get('uploader') or '', 'duration': float(e.get('duration') or 0),
                     'views': int(e.get('view_count') or 0), 'thumbnail': thumb, 'live': False})
     return json.dumps({'ok': True, 'results': out})
 
