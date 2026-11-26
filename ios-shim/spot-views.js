@@ -503,7 +503,7 @@ const SpotViews = (() => {
   }
   function onlineRow(r) {
     const el = html(`<div class="sp-lrow sp-orow" data-url="${esc(r.url)}">
-      <div class="sp-row-cover sp-ocover"><img src="${esc(r.thumbnail || genCover(r.id))}" loading="lazy" /></div>
+      <div class="sp-row-cover sp-ocover ${r.square ? 'square' : ''}"><img src="${esc(r.thumbnail || genCover(r.id))}" loading="lazy" /></div>
       <div class="sp-row-t"><b>${esc(r.title)}</b><span>${esc(r.source === 'SoundCloud' || r.kind === 'song' ? 'Song' : 'Video')} • ${esc((r.channel || '').replace(/ - Topic$/i, '') || r.source)}${r.duration ? ' • ' + fmtTime(r.duration) : ''}</span></div>
       <button class="sp-obtn"></button>
     </div>`);
@@ -534,7 +534,7 @@ const SpotViews = (() => {
         const off = await discoverOfficialSong(r.title);
         if (off) { url = off.url; UI.toast(`Using the official song: ${off.title}`); }
       }
-      const jobs = await native.dl.add({ url, format, dir: State.settings().downloadDir, playlist: false, addToLibrary: true });
+      const jobs = await native.dl.add({ url, format, dir: State.settings().downloadDir, playlist: false, addToLibrary: true, meta: typeof discoverMeta === 'function' && url === r.url ? discoverMeta(r) : null });
       if (jobs[0]) dlByUrl.set(r.url, jobs[0]);
       addRecentSearch({ k: 'q', v: searchQ.trim() });
       UI.toast(`Downloading "${r.title}"`);

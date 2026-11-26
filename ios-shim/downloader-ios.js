@@ -87,7 +87,7 @@
     });
   }
   function settle(j) { const r = j._resolveRun; delete j._resolveRun; if (r) r(); }
-  function fail(j, msg) { j.status = 'error'; j.error = String(msg || 'Download failed').split('\n').filter(Boolean).pop(); emitJob(j); settle(j); }
+  function fail(j, msg, detail) { j.status = 'error'; j.error = String(msg || 'Download failed').split('\n').filter(Boolean).pop(); j.errorDetail = detail || String(msg || ''); emitJob(j); settle(j); }
 
   // events from the native engine
   if (plugin && plugin.addListener) {
@@ -106,7 +106,7 @@
         }
         case 'done': j.status = 'done'; j.progress = 100; j.statusText = j.files.length > 1 ? `${j.files.length} files` : ''; emitJob(j); settle(j); return;
         case 'cancelled': j.status = 'cancelled'; emitJob(j); settle(j); return;
-        case 'error': fail(j, ev.error); return;
+        case 'error': fail(j, ev.error, ev.detail); return;
         case 'expand': {
           // a playlist/album: queue every entry as its own download so they run in parallel
           const entries = ev.entries || [];
@@ -163,7 +163,7 @@
     async retry(id) {
       const j = jobs.get(id);
       if (!j || j.status === 'downloading') return;
-      Object.assign(j, { status: 'queued', progress: 0, error: null, statusText: '', files: [] });
+      Object.assign(j, { status: 'queued', progress: 0, error: null, errorDetail: null, statusText: '', files: [] });
       queue.push(j.id); emitJob(j); pump();
     },
     async remove(id) { await dl.cancel(id); jobs.delete(id); fire('removed', id); },
