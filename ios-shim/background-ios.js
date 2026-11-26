@@ -1,4 +1,5 @@
-// Aurora for iPhone: keep the music going when you leave the app or lock the phone.
+// Aurora for iPhone: keep a music VIDEO's sound going when you leave the app or lock the phone.
+// (Songs play through iOS's own audio engine instead, see native-audio-ios.js.)
 // iOS lets audio play in the background, but it pauses anything playing in a <video> element (and
 // Aurora plays everything, including music videos, in one <video> element). So when the app goes to
 // the background, the sound is handed to a hidden <audio> element at the exact same spot; next/
@@ -40,6 +41,8 @@ const BackgroundAudio = (() => {
 
   function enterBackground() {
     if (bg) return;
+    // songs play natively (native-audio-ios.js) and keep going on their own; this is only for videos
+    if (typeof NativeAudio !== 'undefined' && NativeAudio.active) return;
     const playing = !media.paused || wanted;
     if (!playing || !srcOf()) return;
     bg = true;
