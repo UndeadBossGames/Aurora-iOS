@@ -247,7 +247,10 @@
       const u = new URL(raw);
       const target = u.searchParams.get('url') || u.searchParams.get('u') || decodeURIComponent(u.pathname.replace(/^\/+/, ''));
       if (/^https?:\/\//i.test(target)) { App.go('downloader', target); UI.toast('Link ready. Pick a format and tap Download.'); }
-      else if (u.host === 'together' && target) { try { ListenTogether.join(target); App.go('together'); } catch (e) { UI.toast(e.message); } }
+      else if (u.host === 'together' && target) {
+        if (typeof SpotJam !== 'undefined' && document.body.classList.contains('spot')) { SpotJam.joinPrompt(target); return; }
+        try { ListenTogether.join(target); App.go('together'); } catch (e) { UI.toast(e.message); }
+      }
     } catch {}
   }
   function wireLinks() {
