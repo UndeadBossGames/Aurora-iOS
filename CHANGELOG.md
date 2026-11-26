@@ -2,6 +2,19 @@
 
 Every version is a git tag. To get an older build, download its .ipa from Releases.
 
+## v1.7.0
+- **Music like Spotify:** songs now play through iOS's own audio engine. They keep playing (and move on to the next song) with the app closed or the phone locked, the lock screen and Control Center show what's playing with cover art, and AirPods, headphone and lock-screen controls work: play, pause, skip, go back and scrub. Calls and Siri pause the music and it comes back after; unplugging headphones pauses it. The output device (AirPods, speakers, AirPlay) shows in the player, with iOS's own picker.
+- **Live scrubbing:** drag the progress bar and hear the song as you move.
+- **Downloads that work:** six different YouTube methods are tried in turn, the downloader updates itself and starts using the update right away, and when something really can't be downloaded you get a plain reason, Retry and the technical details.
+- **New Downloader page:** paste chip, link preview with title and picture, Song or Video with quality, live download cards, failures explained, and everything you downloaded by day.
+- **Real artists in search:** song results come from YouTube Music with artist, album, length and square art.
+- **Re-sign countdown:** see exactly when Aurora needs re-signing with Sideloadly (Home, side menu, Settings), with optional reminders a day and 3 hours before.
+- **AI DJ (opt in):** themed mixes from your library with a host who talks between songs, using the most natural voice on your iPhone or an ElevenLabs voice. Switch it up from Now Playing.
+- **Personalize:** 10 home-screen icons, accent colors, backgrounds, Now Playing styles and which shelves Home shows.
+- **Last.fm and stats.fm:** scrobble to Last.fm (also songs played with the app closed), and see your stats.fm top songs and artists with one-tap downloads.
+- **Explicit:** an E marks explicit songs, and the explicit version is downloaded first.
+- **Jam:** Listen Together rebuilt like Spotify's Jam: invite by link, QR code or code, a shared queue everyone adds to (with who added what), and the host can let others play, pause and skip.
+
 ## v1.6.0
 - **Songs first:** online search shows the official songs (from YouTube Music) at the top, then videos, on both the Search tab and Discover.
 - **Official song, not the music video:** saving a music video as a song now downloads the official release when one matches. Identify does the same.
