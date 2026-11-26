@@ -51,6 +51,7 @@ const NativeAudio = (() => {
     return {
       key: t.id, url: native.fileUrl(t.path), title: t.title || '', artist: t.artist && t.artist !== 'Unknown artist' ? t.artist : '',
       album: t.album || '', art: t.cover ? native.fileUrl(t.cover) : (t.coverUrl || ''), end: t.end || 0, duration: t.duration || 0,
+      ...((typeof DJ !== 'undefined' && DJ.introFor && DJ.introFor(t.id)) || {}),
     };
   }
 
@@ -215,6 +216,7 @@ const NativeAudio = (() => {
         fire('seeked'); fire('timeupdate');
         break;
       case 'advanced':
+        S.advAt = ev.at || Date.now();   // when it really happened (the app may have been asleep)
         adopt(ev.key);
         S.paused = !ev.playing; S.wantPlay = !!ev.playing;
         fire(S.paused ? 'pause' : 'play');
@@ -260,6 +262,7 @@ const NativeAudio = (() => {
     scrubTo(t) { if (!S.on) return; S.time = t; S.stamp = performance.now(); call('seek', { time: t, scrub: true }); },
     scrubEnd(t) { S.scrub = false; if (S.on) el.currentTime = t; },
     state: S,
+    refresh: () => sendQueueSoon(),
     get route() { return route; },
     onRoute(fn) { routeFns.push(fn); },
     pickRoute: () => call('pickRoute'),

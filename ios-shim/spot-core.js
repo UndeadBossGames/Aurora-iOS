@@ -188,7 +188,7 @@ const SpotUI = (() => {
     sheet([
       { icon: 'note', round: true, label: 'Playlist', sub: 'Name it, then add your downloaded songs', action: () => SpotViews.createPlaylist() },
       { icon: 'identify', round: true, label: 'Identify a song', sub: "Hear something? Find out what it is and download it", action: () => App.go('identify') },
-      { icon: 'together', round: true, label: 'Listen Together', sub: 'Listen together from anywhere', action: () => App.go('together') },
+      { icon: 'together', round: true, label: 'Start a Jam', sub: 'Listen and add songs together, from anywhere', action: () => App.go('together') },
       { icon: 'download', round: true, label: 'Download', sub: 'Save a song or video from a link', action: () => App.go('downloader') },
       { icon: 'folderPlus', round: true, label: 'Add from Files', sub: 'Import music and videos from your iPhone', action: () => App.importFiles() },
     ], { cls: 'create', closeBtn: true });
@@ -220,6 +220,7 @@ const SpotUI = (() => {
         <button class="sp-dr-item" data-a="recents">${icon('history', 24)}<span>Recents</span></button>
         <button class="sp-dr-item" data-a="updates">${icon('megaphone', 24)}<span>Your Updates</span>${upd ? '<i class="sp-dot"></i>' : ''}</button>
         <button class="sp-dr-item" data-a="account">${icon('cloud', 24)}<span>Aurora Account</span>${typeof Account !== 'undefined' && Account.signedIn() ? '<em>Synced</em>' : ''}</button>
+        <button class="sp-dr-item" data-a="personalize">${icon('sparkle', 24)}<span>Personalize</span></button>
         <button class="sp-dr-item sg-dr" data-a="signing" data-signing="drawer" hidden>${icon('clock', 24)}<span>App expires in</span><em data-signing-time="short"></em></button>
         <button class="sp-dr-item" data-a="settings">${icon('gear', 24)}<span>Settings and privacy</span></button>
         <div class="sp-dr-friends">
@@ -228,7 +229,7 @@ const SpotUI = (() => {
           <button class="sp-dr-friend" data-a="addfriend"><span class="sp-dr-fav add">${icon('plus', 26)}</span><b>Invite friends</b><small>&nbsp;</small></button>
         </div>
         <button class="sp-dr-msg" data-a="friends"><div><b>Friends ${icon('chevronRight', 18)}</b><span>See what your friends are playing and share your music with them.</span></div><span class="sp-dr-compose">${icon('compose', 24)}</span></button>
-        <button class="sp-dr-new" data-a="together"><span class="sp-dr-plus">${icon('together', 22)}</span><span>Start a Listen Together session</span></button>
+        <button class="sp-dr-new" data-a="together"><span class="sp-dr-plus">${icon('together', 22)}</span><span>Start a Jam</span></button>
       </div>`;
     const go = (fn) => { closeDrawer(); setTimeout(fn, 180); };
     $('.sp-dr-me', d).onclick = () => go(() => App.go('profile'));
@@ -236,7 +237,7 @@ const SpotUI = (() => {
     $$('[data-a]', d).forEach((b) => b.onclick = () => go(() => ({
       identify: () => App.go('identify'), stats: () => App.go('spstats'), recents: () => App.go('sprecents'), updates: () => SpotViews.updates(),
       account: () => App.go('account'), settings: () => App.go('settings'), friends: () => App.go('friends'),
-      addfriend: () => App.go('friends'), together: () => App.go('together'), signing: () => Signing.sheet(),
+      addfriend: () => App.go('friends'), together: () => App.go('together'), signing: () => Signing.sheet(), personalize: () => App.go('personalize'),
     })[b.dataset.a]()));
     $$('.sp-dr-friend[data-code]', d).forEach((b) => b.onclick = () => go(() => App.go('friendlib', b.dataset.code)));
     S.drawer = true;
@@ -298,6 +299,10 @@ const SpotUI = (() => {
     SpotViews.install();
     if (typeof SpotDL !== 'undefined') SpotDL.install();
     if (typeof Signing !== 'undefined') Signing.install();
+    if (typeof Personalize !== 'undefined') Personalize.install();
+    if (typeof DJ !== 'undefined') DJ.install();
+    if (typeof Connect !== 'undefined') Connect.install();
+    if (typeof SpotJam !== 'undefined') SpotJam.install();
     // the classic layer's tab bar, Library sheet and top bar are replaced
     body.classList.remove('show-lib');
     const go = App.go;

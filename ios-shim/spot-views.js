@@ -129,7 +129,7 @@ const SpotViews = (() => {
     const el = html(`<div class="sp-row ${playing ? 'playing' : ''}" data-id="${esc(t.id)}">
       ${opts.num ? `<span class="sp-num">${opts.num}</span>` : ''}
       ${opts.noCover ? '' : cover(UI.coverSrc(t), 'sp-row-cover')}
-      <div class="sp-row-t"><b>${esc(t.title)}</b><span>${opts.sub !== undefined ? opts.sub : `<i class="sp-dl">${icon('dl', 13)}</i>${typeTag(t)}${esc(opts.type ? `${opts.type} • ${t.artist}` : t.artist)}`}</span></div>
+      <div class="sp-row-t"><b>${esc(t.title)}</b><span>${opts.sub !== undefined ? opts.sub : `<i class="sp-dl">${icon('dl', 13)}</i>${t.explicit ? '<i class="explicit">E</i>' : ''}${typeTag(t)}${esc(opts.type ? `${opts.type} • ${t.artist}` : t.artist)}`}</span></div>
       ${opts.add ? `<button class="sp-row-add">${icon(State.isLiked(t.id) ? 'addedCircle' : 'addCircle', 24)}</button>` : ''}
       ${opts.remove ? `<button class="sp-row-x">${icon('close', 20)}</button>` : ''}
       ${opts.dots === false ? '' : `<button class="sp-row-dots">${icon('dotsH', 20)}</button>`}
@@ -200,7 +200,7 @@ const SpotViews = (() => {
     return el;
   }
   function shelf(title, cards, opts = {}) {
-    if (!cards.length) return document.createDocumentFragment();
+    if (!cards.length || (opts.home !== false && (State.settings().hiddenShelves || []).includes(title))) return document.createDocumentFragment();
     const el = html(`<section class="sp-shelf">
       <div class="sp-shelf-head">${opts.pre ? `<span class="sp-shelf-pre">${opts.pre}</span>` : ''}<h2>${esc(title)}</h2>${opts.onMore ? '<button class="sp-more">Show all</button>' : ''}</div>
       <div class="sp-shelf-row"></div>
@@ -504,7 +504,7 @@ const SpotViews = (() => {
   function onlineRow(r) {
     const el = html(`<div class="sp-lrow sp-orow" data-url="${esc(r.url)}">
       <div class="sp-row-cover sp-ocover ${r.square ? 'square' : ''}"><img src="${esc(r.thumbnail || genCover(r.id))}" loading="lazy" /></div>
-      <div class="sp-row-t"><b>${esc(r.title)}</b><span>${esc(r.source === 'SoundCloud' || r.kind === 'song' ? 'Song' : 'Video')} • ${esc((r.channel || '').replace(/ - Topic$/i, '') || r.source)}${r.duration ? ' • ' + fmtTime(r.duration) : ''}</span></div>
+      <div class="sp-row-t"><b>${esc(r.title)}</b><span>${r.explicit ? '<i class="explicit">E</i>' : ''}${esc(r.source === 'SoundCloud' || r.kind === 'song' ? 'Song' : 'Video')} • ${esc((r.channel || '').replace(/ - Topic$/i, '') || r.source)}${r.duration ? ' • ' + fmtTime(r.duration) : ''}</span></div>
       <button class="sp-obtn"></button>
     </div>`);
     const paint = () => {

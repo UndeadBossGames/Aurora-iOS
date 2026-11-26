@@ -199,6 +199,16 @@ const SpotPlayer = (() => {
     const [from, name] = contextLabel();
     $('.sp-np-from small', np).textContent = from;
     $('.sp-np-from b', np).textContent = name;
+    // the AI DJ: a button to jump to its next run (and hear it talk)
+    let djb = $('.sp-np-djbtn', np);
+    const djOn = typeof DJ !== 'undefined' && DJ.active;
+    if (djOn && !djb) {
+      djb = html(`<button class="sp-np-djbtn"><span class="dj-mini-orb"></span>DJ<em>Switch it up</em></button>`);
+      djb.onclick = (e) => { e.stopPropagation(); DJ.next(); };
+      $('.sp-np-from', np).after(djb);
+    }
+    if (djb) djb.hidden = !djOn;
+    np.style.setProperty('--npart', `url("${String(src).replace(/"/g, '%22')}")`);
     SpotUI.colorOf(src).then((c) => {
       color = c;
       mini.style.setProperty('--mc', c);
