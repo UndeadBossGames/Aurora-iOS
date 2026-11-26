@@ -10,9 +10,12 @@ const SpotPlayer = (() => {
   // ---------- AirPlay / output device ----------
   const media = () => Player.media;
   let wireless = false;
-  function device() { return wireless ? 'AirPlay' : 'This iPhone'; }
+  const NA = () => (typeof NativeAudio !== 'undefined' && NativeAudio.available ? NativeAudio : null);
+  function device() { const n = NA(); if (n && n.route && !(Player.current && Player.current.kind === 'video')) return n.route.name; return wireless ? 'AirPlay' : 'This iPhone'; }
   function pickDevice() {
     const m = media();
+    // songs: iOS's own output picker (AirPods, Bluetooth speakers, AirPlay, Apple TV)
+    if (NA() && NativeAudio.active) { SpotUI.haptic('light'); NativeAudio.pickRoute(); return; }
     if (m.webkitShowPlaybackTargetPicker) { SpotUI.haptic('light'); m.webkitShowPlaybackTargetPicker(); return; }
     SpotUI.sheet([{ icon: 'phone', label: 'This iPhone', sub: 'Listening on', on: true, action: () => {} }, { icon: 'together', label: 'Listen Together', sub: 'Play in sync with friends anywhere', action: () => App.go('together') }], { title: 'Connect to a device' });
   }
@@ -94,10 +97,32 @@ const SpotPlayer = (() => {
     // scrubbing
     const bar = $('.sp-np-bar', np);
     let drag = false;
-    const seekTo = (x) => { const r = bar.getBoundingClientRect(); const f = Math.max(0, Math.min(1, (x - r.left) / r.width)); paintTime(f * (media().duration || 0)); return f; };
-    bar.addEventListener('touchstart', (e) => { drag = true; np.classList.add('scrubbing'); seekTo(e.touches[0].clientX); }, { passive: true });
-    bar.addEventListener('touchmove', (e) => { if (drag) seekTo(e.touches[0].clientX); }, { passive: true });
-    bar.addEventListener('touchend', (e) => { if (!drag) return; drag = false; np.classList.remove('scrubbing'); Player.seekRatio(seekTo(e.changedTouches[0].clientX)); }, { passive: true });
+    let fx = 0; const lastX = () => fx;
+    const seekTo = (x) => { fx = x; const r = bar.getBoundingClientRect(); const f = Math.max(0, Math.min(1, (x - r.left) / r.width)); paintTime(f * (media().duration || 0)); return f; };
+    // live scrubbing: the song plays from wherever your finger is while you drag, like Spotify
+    const native = () => typeof NativeAudio !== 'undefined' && NativeAudio.active;
+    let lastLive = 0, liveTimer = 0, liveT = 0;
+    const live = (f) => {
+      const d = media().duration || 0;
+      if (!(d > 0)) return;
+      liveT = f * d;
+      const go = () => { lastLive = performance.now(); if (native()) NativeAudio.scrubTo(liveT); else { try { media().fastSeek ? media().fastSeek(liveT) : (media().currentTime = liveT); } catch {} } };
+      clearTimeout(liveTimer);
+      const gap = native() ? 45 : 140;   // the web player needs more time per jump than iOS's engine
+      if (performance.now() - lastLive >= gap) go(); else liveTimer = setTimeout(go, gap);
+    };
+    bar.addEventListener('touchstart', (e) => { drag = true; np.classList.add('scrubbing'); if (native()) NativeAudio.scrubStart(); live(seekTo(e.touches[0].clientX)); }, { passive: true });
+    bar.addEventListener('touchmove', (e) => { if (drag) live(seekTo(e.touches[0].clientX)); }, { passive: true });
+    const endDrag = (x) => {
+      if (!drag) return;
+      drag = false; clearTimeout(liveTimer);
+      np.classList.remove('scrubbing');
+      const f = seekTo(x), d = media().duration || 0;
+      if (native()) NativeAudio.scrubEnd(f * d); else Player.seekRatio(f);
+      SpotUI.haptic('select');
+    };
+    bar.addEventListener('touchend', (e) => endDrag(e.changedTouches[0].clientX), { passive: true });
+    bar.addEventListener('touchcancel', () => endDrag(lastX()), { passive: true });
     bar.addEventListener('click', (e) => Player.seekRatio(seekTo(e.clientX)));
     np._drag = () => drag;
     // swipe down from the top half to close; swipe the artwork to skip
@@ -464,6 +489,7 @@ const SpotPlayer = (() => {
     const m = media();
     m.setAttribute('x-webkit-airplay', 'allow');
     m.setAttribute('playsinline', '');
+    if (NA()) NativeAudio.onRoute(() => syncTrack(true));
     m.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => { wireless = !!m.webkitCurrentPlaybackTargetIsWireless; syncTrack(true); });
     m.addEventListener('ended', () => Timer.onEnded());
     m.addEventListener('ratechange', () => { if (m.playbackRate !== m.defaultPlaybackRate && m.defaultPlaybackRate !== 1) m.playbackRate = m.defaultPlaybackRate; });
