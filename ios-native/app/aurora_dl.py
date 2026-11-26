@@ -19,6 +19,8 @@ import hashlib
 import json
 import os
 import queue
+import re
+import shutil
 import sys
 import threading
 import time
@@ -70,6 +72,135 @@ def _clean_error(e):
     import re
     msg = re.sub(r'\x1b\[[0-9;]*m', '', msg)
     return msg[:600]
+
+
+# YouTube can be asked for a video in several ways ("clients"). When one is blocked, rate-limited
+# or hands out links that refuse to download, the next one usually works. Tried in this order.
+CLIENT_LADDER = [
+    None,                          # yt-dlp's current defaults: best quality when everything works
+    ['tv', 'web_safari'],
+    ['android_vr'],                # needs no proof-of-origin token or JavaScript challenge
+    ['mweb'],
+    ['ios'],
+    ['web_embedded', 'tv_embedded'],
+]
+
+# errors no other method can fix
+_PERMANENT = re.compile(r'(Private video|has been removed|account associated with this video has been terminated|'
+                        r'copyright claim|members-only|Join this channel|Premieres in|live event will begin|'
+                        r'not available in your country|Unsupported URL|is not a valid URL)', re.I)
+
+
+def _is_youtube(url):
+    return bool(re.search(r'(youtube\.com|youtu\.be|^ytsearch\d*:)', url or '', re.I))
+
+
+def _friendly(e):
+    """Turn a yt-dlp error into something a person can act on."""
+    raw = _clean_error(e)
+    rules = [
+        (r'confirm you.?re not a bot|Sign in to confirm(?! your age)', "YouTube asked Aurora to prove it isn't a bot, on every method it tried. Wait a few minutes or switch between Wi-Fi and mobile data, then tap Retry."),
+        (r'confirm your age|age.restricted|inappropriate for some users', "This video is age-restricted, so YouTube only shows it to signed-in accounts."),
+        (r'Private video', 'This video is private.'),
+        (r'has been removed|terminated', 'This video has been removed from YouTube.'),
+        (r'not available in your country|geo.?restrict', "This video isn't available in your country."),
+        (r'members-only|Join this channel', 'This video is only for channel members.'),
+        (r'Premieres in|live event will begin', "This video hasn't started yet."),
+        (r'HTTP Error 403|Forbidden', 'YouTube refused the download on every method Aurora tried. Tap Retry in a minute.'),
+        (r'HTTP Error 429|Too Many Requests', 'YouTube says too many requests. Wait a few minutes, then tap Retry.'),
+        (r'Requested format is not available|No video formats found', "YouTube didn't offer a downloadable copy right now. Tap Retry in a minute."),
+        (r'timed out|Network is unreachable|nodename nor servname|Temporary failure in name resolution|Connection reset|No route to host|offline', 'The internet connection dropped. Check your connection and tap Retry.'),
+        (r'No space left', 'Your iPhone is out of storage.'),
+        (r'Unsupported URL|is not a valid URL', "Aurora can't download from that link."),
+    ]
+    for pat, text in rules:
+        if re.search(pat, raw, re.I):
+            return text, raw
+    return raw, raw
+
+
+# ---- keeping yt-dlp current (YouTube changes often; a fresh yt-dlp fixes most failures) ----
+_UPDATE_LOCK = threading.Lock()
+_LAST_TRY = {'t': 0.0}
+
+
+def _zip_version():
+    try:
+        with zipfile.ZipFile(_UPDATE_ZIP) as z:
+            m = re.search(r"__version__\s*=\s*'([^']+)'", z.read('yt_dlp/version.py').decode('utf-8', 'replace'))
+            return m.group(1) if m else None
+    except Exception:
+        return None
+
+
+def _reload_ytdlp():
+    """Load the newest yt-dlp right away, without restarting the app. Jobs already running keep
+    the copy they started with; new attempts use the new one."""
+    global yt_dlp, DownloadCancelled
+    import importlib
+    import zipimport
+    for name in list(sys.modules):
+        if name == 'yt_dlp' or name.startswith(('yt_dlp.', 'yt_dlp_plugins', 'yt_dlp_ejs')):
+            del sys.modules[name]
+    try:
+        zipimport._zip_directory_cache.pop(_UPDATE_ZIP, None)
+    except Exception:
+        pass
+    sys.path_importer_cache.pop(_UPDATE_ZIP, None)
+    if os.path.isfile(_UPDATE_ZIP) and _UPDATE_ZIP not in sys.path:
+        sys.path.insert(0, _UPDATE_ZIP)
+    importlib.invalidate_caches()
+    yt_dlp = importlib.import_module('yt_dlp')
+    DownloadCancelled = importlib.import_module('yt_dlp.utils').DownloadCancelled
+
+
+def _ensure_latest(min_gap=1800):
+    """After every method failed: fetch a newer yt-dlp if there is one and switch to it.
+    Returns True when a newer yt-dlp is now in use (worth trying again)."""
+    with _UPDATE_LOCK:
+        loaded = yt_dlp.version.__version__
+        zv = _zip_version()
+        if not zv or zv == loaded:
+            if time.time() - _LAST_TRY['t'] < min_gap:
+                return False
+            _LAST_TRY['t'] = time.time()
+            res = json.loads(update())
+            zv = res.get('version') if res.get('ok') and res.get('changed') else None
+        if zv and zv != loaded:
+            try:
+                _reload_ytdlp()
+            except Exception:
+                return False
+            return yt_dlp.version.__version__ != loaded
+        return False
+
+
+def _background_update():
+    """Once per launch, at most twice a day: quietly download a newer yt-dlp for next time."""
+    stamp = os.path.join(_UPDATE_DIR, 'last-check')
+    try:
+        if os.path.isfile(stamp) and time.time() - os.path.getmtime(stamp) < 12 * 3600:
+            return
+        os.makedirs(_UPDATE_DIR, exist_ok=True)
+        with open(stamp, 'w') as f:
+            f.write(str(time.time()))
+        with _UPDATE_LOCK:
+            _LAST_TRY['t'] = time.time()
+            update()
+        with LOCK:
+            idle = not JOBS
+        if idle and _zip_version() and _zip_version() != yt_dlp.version.__version__:
+            _reload_ytdlp()
+    except Exception:
+        pass
+
+
+def _clear_cache():
+    """YouTube's player code is cached; a stale copy can break every download until cleared."""
+    try:
+        shutil.rmtree(os.path.join(os.path.expanduser('~'), 'Library', 'Caches', 'yt-dlp'), ignore_errors=True)
+    except Exception:
+        pass
 
 
 class _Logger:
@@ -152,6 +283,7 @@ class _Job:
         self.base = 0.0       # progress range for multi-part downloads
         self.span = 100.0
         self.last_emit = 0.0
+        self.client = None    # which YouTube client this attempt uses (see CLIENT_LADDER)
 
     # progress hook shared by all parts
     def hook(self, d):
@@ -178,6 +310,8 @@ class _Job:
         o = _base_opts(self.logger)
         o['progress_hooks'] = [self.hook]
         o['outtmpl'] = {'default': os.path.join(self.dir, '%(title).140B [%(id)s].%(ext)s')}
+        if self.client:
+            o['extractor_args'] = {'youtube': {'player_client': list(self.client)}}
         o.update(extra)
         return o
 
@@ -271,8 +405,8 @@ def _track(job, info, path, kind):
     return {
         'path': _rel(path, job.root, 'docs'),
         'title': meta.get('title') or info.get('track') or info.get('title') or os.path.basename(path),
-        'artist': meta.get('artist') or info.get('artist') or info.get('uploader') or info.get('channel') or 'Unknown artist',
-        'album': info.get('album') or ('Spotify downloads' if job.source == 'Spotify' else (info.get('extractor_key') or 'Downloads')),
+        'artist': meta.get('artist') or info.get('artist') or re.sub(r' - Topic$', '', info.get('uploader') or info.get('channel') or '') or 'Unknown artist',
+        'album': meta.get('album') or info.get('album') or ('Spotify downloads' if job.source == 'Spotify' else (info.get('extractor_key') or 'Downloads')),
         'duration': float(info.get('duration') or 0),
         'kind': kind,
         'source': job.source or info.get('extractor_key') or 'web',
@@ -281,6 +415,83 @@ def _track(job, info, path, kind):
         'cover': cover,
         'coverUrl': cover_url,
     }
+
+
+def _attempt(job):
+    """One try at downloading with the job's current client. Returns once the file is saved or
+    handed to the app's fast downloader; raises when this method doesn't work."""
+    with yt_dlp.YoutubeDL(job.opts()) as ydl:
+        info = ydl.extract_info(job.url, download=False)
+    if info and info.get('_type') in ('playlist', 'multi_video'):
+        entries = [e for e in (info.get('entries') or []) if e]
+        if not entries:
+            raise RuntimeError('Nothing to download at that link.')
+        info = entries[0]
+    if job.cancelled:
+        raise DownloadCancelled('Cancelled')
+    _emit(type='start', jobId=job.id, title=info.get('title') or job.url, thumbnail=info.get('thumbnail'))
+
+    want_video = job.format.startswith('video')
+    h = _height_filter(job.format)
+    if not want_video:
+        job.base, job.span = 0.0, 100.0
+        try:
+            r = _resolve(job, info, AUDIO_SPEC)
+        except Exception as e:
+            r = None
+            job.logger.warning(f'native fetch unavailable: {e}')
+        if r and not job.native_off:
+            _fetch(job, [r], 'file', _track(job, info, r['path'], 'audio'))
+            return
+        path = _download_with(job, info, AUDIO_SPEC)
+        _emit(type='file', jobId=job.id, track=_track(job, info, path, 'audio'))
+        _emit(type='done', jobId=job.id)
+        return
+
+    # Best quality: separate H.264 video + AAC audio, merged by the app (no ffmpeg on iOS).
+    formats = info.get('formats') or []
+    has_split = any((f.get('vcodec') or 'none') != 'none' and (f.get('acodec') or 'none') == 'none' for f in formats) \
+        and any((f.get('acodec') or 'none') != 'none' and (f.get('vcodec') or 'none') == 'none' for f in formats)
+    if has_split:
+        try:
+            rv = ra = None
+            try:
+                rv = _resolve(job, info, VIDEO_ONLY_SPEC.format(h=h) + '/' + VIDEO_ONLY_SPEC.format(h=''), '.video')
+                ra = _resolve(job, info, AUDIO_ONLY_SPEC, '.audio')
+            except Exception as e:
+                job.logger.warning(f'native fetch unavailable: {e}')
+            if rv and ra and not job.native_off:
+                out = rv['path'].replace('.video.', '.', 1)
+                out = os.path.splitext(out)[0] + '.mp4'
+                _fetch(job, [rv, ra], 'merge', _track(job, info, out, 'video'), out=out)
+                return
+            job.base, job.span = 0.0, 82.0
+            vpath = _download_with(job, info, VIDEO_ONLY_SPEC.format(h=h) + '/' + VIDEO_ONLY_SPEC.format(h=''), '.video')
+            job.base, job.span = 82.0, 18.0
+            apath = _download_with(job, info, AUDIO_ONLY_SPEC, '.audio')
+            out = vpath.replace('.video.', '.', 1)
+            if out == vpath:
+                out = os.path.splitext(vpath)[0] + '.merged.mp4'
+            out = os.path.splitext(out)[0] + '.mp4'
+            track = _track(job, info, out, 'video')
+            _emit(type='merge', jobId=job.id, video=vpath, audio=apath, out=out, track=track)
+            return  # the app emits "file" + "done" after merging
+        except DownloadCancelled:
+            raise
+        except Exception as e:  # no matching split formats: fall back to a single file
+            job.logger.warning(f'split download failed, using single file: {e}')
+    job.base, job.span = 0.0, 100.0
+    try:
+        r = _resolve(job, info, SINGLE_SPEC.format(h=h))
+    except Exception as e:
+        r = None
+        job.logger.warning(f'native fetch unavailable: {e}')
+    if r and not job.native_off:
+        _fetch(job, [r], 'file', _track(job, info, r['path'], 'video'))
+        return
+    path = _download_with(job, info, SINGLE_SPEC.format(h=h))
+    _emit(type='file', jobId=job.id, track=_track(job, info, path, 'video'))
+    _emit(type='done', jobId=job.id)
 
 
 def _run(job):
@@ -306,92 +517,56 @@ def _run(job):
                 _emit(type='expand', jobId=job.id, title=flat.get('title') or 'Playlist', entries=entries)
                 return
 
-        with yt_dlp.YoutubeDL(job.opts()) as ydl:
-            info = ydl.extract_info(job.url, download=False)
-        if info and info.get('_type') in ('playlist', 'multi_video'):
-            entries = [e for e in (info.get('entries') or []) if e]
-            if not entries:
-                raise RuntimeError('Nothing to download at that link.')
-            info = entries[0]
-        if job.cancelled:
-            raise DownloadCancelled('Cancelled')
-        _emit(type='start', jobId=job.id, title=info.get('title') or job.url, thumbnail=info.get('thumbnail'))
-
-        want_video = job.format.startswith('video')
-        h = _height_filter(job.format)
-        if not want_video:
-            job.base, job.span = 0.0, 100.0
-            try:
-                r = _resolve(job, info, AUDIO_SPEC)
-            except Exception as e:
-                r = None
-                job.logger.warning(f'native fetch unavailable: {e}')
-            if r and not job.native_off:
-                _fetch(job, [r], 'file', _track(job, info, r['path'], 'audio'))
-                return
-            path = _download_with(job, info, AUDIO_SPEC)
-            _emit(type='file', jobId=job.id, track=_track(job, info, path, 'audio'))
-            _emit(type='done', jobId=job.id)
-            return
-
-        # Best quality: separate H.264 video + AAC audio, merged by the app (no ffmpeg on iOS).
-        formats = info.get('formats') or []
-        has_split = any((f.get('vcodec') or 'none') != 'none' and (f.get('acodec') or 'none') == 'none' for f in formats) \
-            and any((f.get('acodec') or 'none') != 'none' and (f.get('vcodec') or 'none') == 'none' for f in formats)
-        if has_split:
-            try:
-                rv = ra = None
+        ladder = CLIENT_LADDER if _is_youtube(job.url) else [None]
+        last = None
+        for round_ in (1, 2):
+            for i, client in enumerate(ladder):
+                if job.cancelled:
+                    raise DownloadCancelled('Cancelled')
+                job.client = client
+                if i or round_ > 1:
+                    _emit(type='status', jobId=job.id, status='downloading', progress=0,
+                          statusText=f'Trying another way ({i + 1} of {len(ladder)})…' if round_ == 1 else 'Trying again with the updated downloader…')
                 try:
-                    rv = _resolve(job, info, VIDEO_ONLY_SPEC.format(h=h) + '/' + VIDEO_ONLY_SPEC.format(h=''), '.video')
-                    ra = _resolve(job, info, AUDIO_ONLY_SPEC, '.audio')
-                except Exception as e:
-                    job.logger.warning(f'native fetch unavailable: {e}')
-                if rv and ra and not job.native_off:
-                    out = rv['path'].replace('.video.', '.', 1)
-                    out = os.path.splitext(out)[0] + '.mp4'
-                    _fetch(job, [rv, ra], 'merge', _track(job, info, out, 'video'), out=out)
+                    _attempt(job)
                     return
-                job.base, job.span = 0.0, 82.0
-                vpath = _download_with(job, info, VIDEO_ONLY_SPEC.format(h=h) + '/' + VIDEO_ONLY_SPEC.format(h=''), '.video')
-                job.base, job.span = 82.0, 18.0
-                apath = _download_with(job, info, AUDIO_ONLY_SPEC, '.audio')
-                out = vpath.replace('.video.', '.', 1)
-                if out == vpath:
-                    out = os.path.splitext(vpath)[0] + '.merged.mp4'
-                out = os.path.splitext(out)[0] + '.mp4'
-                track = _track(job, info, out, 'video')
-                _emit(type='merge', jobId=job.id, video=vpath, audio=apath, out=out, track=track)
-                return  # the app emits "file" + "done" after merging
-            except DownloadCancelled:
-                raise
-            except Exception as e:  # no matching split formats: fall back to a single file
-                job.logger.warning(f'split download failed, using single file: {e}')
-        job.base, job.span = 0.0, 100.0
-        try:
-            r = _resolve(job, info, SINGLE_SPEC.format(h=h))
-        except Exception as e:
-            r = None
-            job.logger.warning(f'native fetch unavailable: {e}')
-        if r and not job.native_off:
-            _fetch(job, [r], 'file', _track(job, info, r['path'], 'video'))
-            return
-        path = _download_with(job, info, SINGLE_SPEC.format(h=h))
-        _emit(type='file', jobId=job.id, track=_track(job, info, path, 'video'))
-        _emit(type='done', jobId=job.id)
+                except DownloadCancelled:
+                    raise
+                except Exception as e:
+                    last = e
+                    job.logger.warning(f'method {i + 1} ({"+".join(client) if client else "default"}) failed: {_clean_error(e)}')
+                    if _PERMANENT.search(str(e)):
+                        raise
+            # every method failed: a newer yt-dlp and a fresh player cache usually fix it
+            if round_ == 1 and len(ladder) > 1:
+                _emit(type='status', jobId=job.id, status='downloading', progress=0, statusText='Updating the downloader…')
+                _clear_cache()
+                if not _ensure_latest():
+                    ladder = [None, ['android_vr'], ['tv', 'web_safari']]   # one more pass with a fresh cache
+                continue
+            break
+        raise last or RuntimeError('Download failed')
     except DownloadCancelled:
         _emit(type='cancelled', jobId=job.id)
     except Exception as e:
-        err = _clean_error(e)
+        err, raw = _friendly(e)
         tail = [line for line in job.logger.lines if not line.startswith('WARNING')]
-        if tail and err in ('', 'None'):
-            err = _clean_error(tail[-1])
-        _emit(type='error', jobId=job.id, error=err)
+        if tail and raw in ('', 'None'):
+            err, raw = _friendly(tail[-1])
+        detail = '\n'.join([raw] + [_clean_error(x) for x in job.logger.lines[-8:]])
+        _emit(type='error', jobId=job.id, error=err, detail=detail[:3000])
     finally:
         with LOCK:
             JOBS.pop(job.id, None)
 
 
+_BG = {'started': False}
+
+
 def start(arg):
+    if not _BG['started']:
+        _BG['started'] = True
+        threading.Thread(target=_background_update, name='aurora-ytdlp-update', daemon=True).start()
     data = _load(arg)
     job = _Job(data)
     with LOCK:
@@ -422,6 +597,71 @@ def poll(arg=None):
 # ---------------------------------------------------------------------------------------------
 # Search (Discover)
 # ---------------------------------------------------------------------------------------------
+_YTM_SONGS = 'EgWKAQIIAWoMEA4QChADEAQQCRAF'   # YouTube Music search filter: Songs
+
+
+def _ytm_search(q, n):
+    """YouTube Music's own Songs search: official releases with artist, album, length and cover art."""
+    from yt_dlp.networking import Request
+    body = json.dumps({'context': {'client': {'clientName': 'WEB_REMIX', 'clientVersion': '1.20241106.01.00', 'hl': 'en', 'gl': 'US'}},
+                       'query': q, 'params': _YTM_SONGS}).encode()
+    req = Request('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', data=body,
+                  headers={'Content-Type': 'application/json', 'Origin': 'https://music.youtube.com', 'Referer': 'https://music.youtube.com/'})
+    with yt_dlp.YoutubeDL({'quiet': True, 'logger': _Logger(), 'socket_timeout': 20}) as ydl:
+        data = json.loads(ydl.urlopen(req).read().decode('utf-8', 'replace'))
+    out = []
+    tabs = (((data.get('contents') or {}).get('tabbedSearchResultsRenderer') or {}).get('tabs') or [])
+    for tab in tabs:
+        sections = ((((tab.get('tabRenderer') or {}).get('content') or {}).get('sectionListRenderer') or {}).get('contents') or [])
+        for sec in sections:
+            for c in ((sec.get('musicShelfRenderer') or {}).get('contents') or []):
+                r = _ytm_item(c.get('musicResponsiveListItemRenderer') or {})
+                if r:
+                    out.append(r)
+                if len(out) >= n:
+                    return out
+    return out
+
+
+def _ytm_item(it):
+    cols = [((c.get('musicResponsiveListItemFlexColumnRenderer') or {}).get('text') or {}).get('runs') or [] for c in it.get('flexColumns') or []]
+    if not cols or not cols[0]:
+        return None
+    vid = (it.get('playlistItemData') or {}).get('videoId') or (((cols[0][0].get('navigationEndpoint') or {}).get('watchEndpoint') or {}).get('videoId'))
+    if not vid:
+        return None
+    title = ''.join(r.get('text', '') for r in cols[0])
+    artists, album, dur, plain = [], '', 0, []
+    for r in (cols[1] if len(cols) > 1 else []):
+        t = r.get('text', '')
+        if t.strip() in ('•', '&', ',', ''):
+            continue
+        page = ((((r.get('navigationEndpoint') or {}).get('browseEndpoint') or {}).get('browseEndpointContextSupportedConfigs') or {})
+                .get('browseEndpointContextMusicConfig') or {}).get('pageType', '')
+        if page.endswith('ARTIST'):
+            artists.append(t)
+        elif page.endswith('ALBUM'):
+            album = t
+        elif re.fullmatch(r'\d+(:\d{2}){1,2}', t.strip()):
+            p = [int(x) for x in t.strip().split(':')]
+            dur = p[-1] + 60 * p[-2] + (3600 * p[-3] if len(p) > 2 else 0)
+        elif t.strip() not in ('Song', 'Video', 'E'):
+            plain.append(t.strip())
+    if not artists and plain:
+        artists = [plain[0]]   # artists without their own page are plain text
+    plays = 0
+    for col in cols[2:]:
+        m = re.match(r'([\d.]+)\s*([KMB]?)\s+plays?', ''.join(r.get('text', '') for r in col), re.I)
+        if m:
+            plays = int(float(m.group(1)) * {'': 1, 'K': 1e3, 'M': 1e6, 'B': 1e9}[m.group(2).upper()])
+    thumbs = ((((it.get('thumbnail') or {}).get('musicThumbnailRenderer') or {}).get('thumbnail') or {}).get('thumbnails') or [])
+    thumb = thumbs[-1]['url'] if thumbs else f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
+    thumb = re.sub(r'=w\d+-h\d+', '=w544-h544', thumb)
+    return {'id': vid, 'url': f'https://www.youtube.com/watch?v={vid}', 'source': 'YouTube', 'kind': 'song',
+            'title': title, 'channel': ', '.join(artists), 'album': album, 'duration': float(dur), 'views': plays,
+            'thumbnail': thumb, 'square': True, 'live': False}
+
+
 def search(arg):
     a = _load(arg)
     q = str(a.get('q') or '').strip()
@@ -430,6 +670,13 @@ def search(arg):
     sc = a.get('source') == 'soundcloud'
     songs = a.get('source') == 'songs'  # YouTube Music "Songs": official audio releases
     n = max(1, min(12 if sc else 30, int(a.get('limit') or 18)))
+    if songs:
+        try:
+            res = _ytm_search(q, n)
+            if res:
+                return json.dumps({'ok': True, 'results': res})
+        except Exception:
+            pass   # fall back to yt-dlp's own YouTube Music search below
     logger = _Logger()
     opts = {**_base_opts(logger), 'skip_download': True, 'ignoreerrors': True}
     if not sc:
