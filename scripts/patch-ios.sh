@@ -69,6 +69,16 @@ if ! grep -q AVAudioSession "$DELEGATE"; then
 fi
 grep -q 'setCategory(.playback' "$DELEGATE" || { echo "patch-ios: could not add the audio session to AppDelegate.swift" >&2; exit 1; }
 
+# Alternate app icons (Settings > Personalize > App icon): one single-size icon set each.
+# add-native.rb turns on "include all app icon assets" so iOS can switch to them.
+for f in assets/icons/*.png; do
+  name="AppIcon-$(basename "$f" .png)"
+  dir="$APP/Assets.xcassets/$name.appiconset"
+  mkdir -p "$dir"
+  cp "$f" "$dir/icon.png"
+  printf '{"images":[{"filename":"icon.png","idiom":"universal","platform":"ios","size":"1024x1024"}],"info":{"author":"xcode","version":1}}' > "$dir/Contents.json"
+done
+
 # App icon and launch screen
 ICONSET="$APP/Assets.xcassets/AppIcon.appiconset"
 for f in "$ICONSET"/*.png; do cp assets/AppIcon-1024.png "$f"; done

@@ -68,6 +68,7 @@ target.build_configurations.each do |c|
   s['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
   s['SWIFT_OBJC_BRIDGING_HEADER'] = 'App/App-Bridging-Header.h'
   s['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+  s['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'  # alternate app icons
 end
 
 proj.save

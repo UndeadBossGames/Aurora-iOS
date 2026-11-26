@@ -16,6 +16,7 @@ import MediaPlayer
 import UIKit
 import UserNotifications
 import AVKit
+import CoreImage
 
 @objc(AuroraAudioPlugin)
 public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -35,6 +36,12 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "remind", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "route", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pickRoute", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setIcon", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "speak", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "voices", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "djVoice", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "qr", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getIcon", returnType: CAPPluginReturnPromise),
     ]
 
     struct Item {
@@ -46,6 +53,8 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let art: String
         let end: Double       // where the sound stops (silent ending that couldn't be cut), 0 = whole file
         let duration: Double
+        let intro: String       // the DJ's line before this song (spoken on-device)
+        let introAudio: String  // or a ready-made recording of it (e.g. an ElevenLabs voice)
 
         init?(_ o: [String: Any]) {
             guard let key = o["key"] as? String, let u = o["url"] as? String, let url = AuroraAudioPlugin.fileURL(u) else { return nil }
@@ -57,6 +66,8 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             art = o["art"] as? String ?? ""
             end = (o["end"] as? NSNumber)?.doubleValue ?? 0
             duration = (o["duration"] as? NSNumber)?.doubleValue ?? 0
+            intro = o["intro"] as? String ?? ""
+            introAudio = o["introAudio"] as? String ?? ""
         }
     }
 
@@ -79,6 +90,13 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     private var controlObs: NSKeyValueObservation?
     private var commandsOn = false
     private var artwork: (key: String, art: MPMediaItemArtwork)?
+    private var musicVolume: Float = 1
+    private let speech = AVSpeechSynthesizer()
+    private var voicePlayer: AVAudioPlayer?
+    private var djVoiceId = ""
+    private var djRate: Float = 0.52
+    private var speaking = false
+    private var speechDelegate: SpeechDelegate?
 
     // MARK: setup
 
@@ -172,7 +190,7 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func setVolume(_ call: CAPPluginCall) {
         let v = Float(call.getDouble("volume") ?? 1)
-        DispatchQueue.main.async { self.player.volume = max(0, min(1, v)); call.resolve() }
+        DispatchQueue.main.async { self.musicVolume = max(0, min(1, v)); if !self.speaking { self.player.volume = self.musicVolume }; call.resolve() }
     }
 
     /// The songs that come after the current one (already in play order, shuffle included).
@@ -238,6 +256,7 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         prepareNext()
         updateNowPlaying()
         loadArtwork(it)
+        if play { introduce(it) }
     }
 
     private func watch(_ pi: AVPlayerItem) {
@@ -316,8 +335,9 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         prepareNext()
         updateNowPlaying()
         loadArtwork(it)
-        emit("advanced", ["key": it.key, "url": it.url.absoluteString, "playing": wantPlay])
+        emit("advanced", ["key": it.key, "url": it.url.absoluteString, "playing": wantPlay, "at": Date().timeIntervalSince1970 * 1000])
         if pi.status == .readyToPlay { emit("loaded", ["key": it.key, "duration": length]) }
+        if wantPlay { introduce(it) }
     }
 
     private func goNext(fromRemote: Bool) {
@@ -329,7 +349,7 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             if let c = current { pushHistory(c) }
             upcoming.removeFirst()
             setCurrent(n, startAt: 0, play: wantPlay || fromRemote)
-            emit("advanced", ["key": n.key, "url": n.url.absoluteString, "playing": wantPlay])
+            emit("advanced", ["key": n.key, "url": n.url.absoluteString, "playing": wantPlay, "at": Date().timeIntervalSince1970 * 1000])
         } else if fromRemote {
             emit("remote", ["cmd": "next"])   // end of what we know: the app decides (repeat all, etc.)
         } else {
@@ -342,7 +362,7 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let p = history.removeLast()
         if let c = current { upcoming.insert(c, at: 0) }
         setCurrent(p, startAt: 0, play: true)
-        emit("advanced", ["key": p.key, "url": p.url.absoluteString, "playing": true])
+        emit("advanced", ["key": p.key, "url": p.url.absoluteString, "playing": true, "at": Date().timeIntervalSince1970 * 1000])
     }
 
     private func reachedEnd() {
@@ -515,9 +535,7 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         ]
         if length > 0 { info[MPMediaItemPropertyPlaybackDuration] = length }
         if let a = artwork, a.key == it.key { info[MPMediaItemPropertyArtwork] = a.art }
-        let center = MPNowPlayingInfoCenter.default()
-        center.nowPlayingInfo = info
-        center.playbackState = isPlaying ? .playing : .paused
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
     private func loadArtwork(_ it: Item) {
@@ -602,5 +620,152 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve(["ok": false, "denied": s.authorizationStatus == .denied])
             }
         }
+    }
+
+    // MARK: home screen icon
+
+    @objc func getIcon(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            call.resolve(["supported": UIApplication.shared.supportsAlternateIcons, "name": UIApplication.shared.alternateIconName ?? ""])
+        }
+    }
+
+    /// name: "AppIcon-sunset" etc., or empty for the original icon. iOS shows its own little confirmation.
+    @objc func setIcon(_ call: CAPPluginCall) {
+        let name = call.getString("name") ?? ""
+        DispatchQueue.main.async {
+            guard UIApplication.shared.supportsAlternateIcons else { call.resolve(["ok": false, "error": "This iPhone can't change app icons"]); return }
+            UIApplication.shared.setAlternateIconName(name.isEmpty ? nil : name) { err in
+                call.resolve(err == nil ? ["ok": true] : ["ok": false, "error": err!.localizedDescription])
+            }
+        }
+    }
+
+    // MARK: AI DJ voice
+
+    final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
+        var done: (() -> Void)?
+        func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { done?() }
+        func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { done?() }
+        func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully flag: Bool) { done?() }
+    }
+
+    /// The most natural voices installed on this iPhone, best first (Premium > Enhanced > default).
+    static func rankedVoices() -> [AVSpeechSynthesisVoice] {
+        let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("en") }
+        func q(_ v: AVSpeechSynthesisVoice) -> Int {
+            if #available(iOS 16.0, *), v.quality == .premium { return 3 }
+            return v.quality == .enhanced ? 2 : 1
+        }
+        let novelty = ["Albert", "Bad News", "Bahh", "Bells", "Boing", "Bubbles", "Cellos", "Good News", "Jester", "Organ", "Superstar", "Trinoids", "Whisper", "Wobble", "Zarvox", "Fred", "Junior", "Ralph", "Kathy"]
+        return all.filter { v in !novelty.contains(where: { v.name.hasPrefix($0) }) && !v.identifier.contains("eloquence") }
+            .sorted { a, b in
+                if q(a) != q(b) { return q(a) > q(b) }
+                let us = (a.language == "en-US" ? 1 : 0) - (b.language == "en-US" ? 1 : 0)
+                return us != 0 ? us > 0 : a.name < b.name
+            }
+    }
+
+    @objc func voices(_ call: CAPPluginCall) {
+        let list: [[String: Any]] = Self.rankedVoices().map { v in
+            var quality = v.quality == .enhanced ? "enhanced" : "default"
+            if #available(iOS 16.0, *), v.quality == .premium { quality = "premium" }
+            return ["id": v.identifier, "name": v.name, "lang": v.language, "quality": quality]
+        }
+        call.resolve(["voices": list])
+    }
+
+    @objc func djVoice(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.djVoiceId = call.getString("voice") ?? ""
+            self.djRate = Float(call.getDouble("rate") ?? 0.52)
+            call.resolve()
+        }
+    }
+
+    /// Say something now (the DJ's opening line, a preview of a voice...).
+    @objc func speak(_ call: CAPPluginCall) {
+        let text = call.getString("text") ?? ""
+        let audio = call.getString("audio") ?? ""
+        DispatchQueue.main.async {
+            self.say(text: text, audio: audio, duck: call.getBool("duck") ?? true) { call.resolve(["ok": true]) }
+        }
+    }
+
+    private func introduce(_ it: Item) {
+        guard !it.intro.isEmpty || !it.introAudio.isEmpty else { return }
+        say(text: it.intro, audio: it.introAudio, duck: true, done: nil)
+    }
+
+    /// Speak over the music: it dips while the DJ talks and comes back up after, like a radio host.
+    private func say(text: String, audio: String, duck: Bool, done: (() -> Void)?) {
+        stopSpeaking()
+        activateSession()
+        speaking = true
+        if duck { ramp(to: musicVolume * 0.22, over: 0.35) }
+        let d = SpeechDelegate()
+        d.done = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self, self.speechDelegate === d else { return }
+                self.speaking = false
+                self.speechDelegate = nil
+                self.ramp(to: self.musicVolume, over: 0.9)
+                done?()
+            }
+        }
+        speechDelegate = d
+        if !audio.isEmpty, let url = Self.fileURL(audio), let p = try? AVAudioPlayer(contentsOf: url) {
+            p.delegate = d
+            voicePlayer = p
+            p.volume = 1
+            p.play()
+            return
+        }
+        guard !text.isEmpty else { d.done?(); return }
+        speech.delegate = d
+        speech.usesApplicationAudioSession = true
+        let u = AVSpeechUtterance(string: text)
+        u.voice = AVSpeechSynthesisVoice(identifier: djVoiceId) ?? Self.rankedVoices().first ?? AVSpeechSynthesisVoice(language: "en-US")
+        u.rate = djRate
+        u.pitchMultiplier = 1.0
+        u.preUtteranceDelay = 0.15
+        u.postUtteranceDelay = 0.1
+        speech.speak(u)
+    }
+
+    private func stopSpeaking() {
+        if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+        voicePlayer?.stop()
+        voicePlayer = nil
+        speechDelegate = nil
+        if speaking { speaking = false; player.volume = musicVolume }
+    }
+
+    private var rampTimer: Timer?
+    private func ramp(to target: Float, over seconds: Double) {
+        rampTimer?.invalidate()
+        let start = player.volume, steps = max(1, Int(seconds / 0.03))
+        var i = 0
+        rampTimer = Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { [weak self] t in
+            guard let self = self else { t.invalidate(); return }
+            i += 1
+            let f = Float(i) / Float(steps)
+            self.player.volume = start + (target - start) * min(1, f * f * (3 - 2 * f))
+            if i >= steps { t.invalidate() }
+        }
+    }
+
+    // MARK: QR codes (Jam invites)
+
+    @objc func qr(_ call: CAPPluginCall) {
+        let text = call.getString("text") ?? ""
+        guard let f = CIFilter(name: "CIQRCodeGenerator") else { call.resolve(["ok": false]); return }
+        f.setValue(Data(text.utf8), forKey: "inputMessage")
+        f.setValue("M", forKey: "inputCorrectionLevel")
+        guard let img = f.outputImage else { call.resolve(["ok": false]); return }
+        let scaled = img.transformed(by: CGAffineTransform(scaleX: 12, y: 12))
+        let ctx = CIContext()
+        guard let cg = ctx.createCGImage(scaled, from: scaled.extent), let png = UIImage(cgImage: cg).pngData() else { call.resolve(["ok": false]); return }
+        call.resolve(["ok": true, "src": "data:image/png;base64," + png.base64EncodedString()])
     }
 }
