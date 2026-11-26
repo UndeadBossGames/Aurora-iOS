@@ -220,6 +220,7 @@ const SpotUI = (() => {
         <button class="sp-dr-item" data-a="recents">${icon('history', 24)}<span>Recents</span></button>
         <button class="sp-dr-item" data-a="updates">${icon('megaphone', 24)}<span>Your Updates</span>${upd ? '<i class="sp-dot"></i>' : ''}</button>
         <button class="sp-dr-item" data-a="account">${icon('cloud', 24)}<span>Aurora Account</span>${typeof Account !== 'undefined' && Account.signedIn() ? '<em>Synced</em>' : ''}</button>
+        <button class="sp-dr-item sg-dr" data-a="signing" data-signing="drawer" hidden>${icon('clock', 24)}<span>App expires in</span><em data-signing-time="short"></em></button>
         <button class="sp-dr-item" data-a="settings">${icon('gear', 24)}<span>Settings and privacy</span></button>
         <div class="sp-dr-friends">
           <button class="sp-dr-friend act" data-a="friends"><span class="sp-dr-fav me">${avatar(56)}</span><b>Activity</b><small>${Friends.sharing() ? 'On' : 'Turn on'}</small></button>
@@ -235,10 +236,11 @@ const SpotUI = (() => {
     $$('[data-a]', d).forEach((b) => b.onclick = () => go(() => ({
       identify: () => App.go('identify'), stats: () => App.go('spstats'), recents: () => App.go('sprecents'), updates: () => SpotViews.updates(),
       account: () => App.go('account'), settings: () => App.go('settings'), friends: () => App.go('friends'),
-      addfriend: () => App.go('friends'), together: () => App.go('together'),
+      addfriend: () => App.go('friends'), together: () => App.go('together'), signing: () => Signing.sheet(),
     })[b.dataset.a]()));
     $$('.sp-dr-friend[data-code]', d).forEach((b) => b.onclick = () => go(() => App.go('friendlib', b.dataset.code)));
     S.drawer = true;
+    if (typeof Signing !== 'undefined') Signing.paint();
     body.classList.add('sp-drawer-open');
     haptic('light');
   }
@@ -294,6 +296,8 @@ const SpotUI = (() => {
     S.active = true;
     body.classList.add('spot');
     SpotViews.install();
+    if (typeof SpotDL !== 'undefined') SpotDL.install();
+    if (typeof Signing !== 'undefined') Signing.install();
     // the classic layer's tab bar, Library sheet and top bar are replaced
     body.classList.remove('show-lib');
     const go = App.go;
