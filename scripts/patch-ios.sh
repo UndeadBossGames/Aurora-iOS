@@ -45,7 +45,7 @@ sed -i '' 's/customClass="CAPBridgeViewController" customModule="Capacitor"/cust
 grep -q 'customClass="AuroraViewController"' "$STORY" || { echo "patch-ios: could not set AuroraViewController in Main.storyboard" >&2; grep -n customClass "$STORY" >&2; exit 1; }
 
 # native sources, the Python engine and its packages
-cp ios-native/AuroraPython.h ios-native/AuroraPython.m ios-native/AuroraDLPlugin.swift ios-native/FastFetch.swift ios-native/SilenceTrim.swift ios-native/AuroraViewController.swift ios-native/App-Bridging-Header.h "$APP/"
+cp ios-native/AuroraPython.h ios-native/AuroraPython.m ios-native/AuroraDLPlugin.swift ios-native/FastFetch.swift ios-native/SilenceTrim.swift ios-native/AuroraAudioPlugin.swift ios-native/AuroraViewController.swift ios-native/App-Bridging-Header.h "$APP/"
 rm -rf "$APP/aurora_app" "$APP/app_packages"
 mkdir -p "$APP/aurora_app"
 cp ios-native/app/*.py "$APP/aurora_app/"
@@ -64,7 +64,8 @@ plutil -replace NSLocalNetworkUsageDescription -string "Aurora copies songs from
 DELEGATE="$APP/AppDelegate.swift"
 if ! grep -q AVAudioSession "$DELEGATE"; then
   perl -0pi -e 's/import UIKit\n/import UIKit\nimport AVFoundation\n/' "$DELEGATE"
-  perl -0pi -e 's/(didFinishLaunchingWithOptions[^{]*\{\n)/$1        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)\n        try? AVAudioSession.sharedInstance().setActive(true)\n/' "$DELEGATE"
+  # (category only: the session is activated when music actually starts, so opening Aurora doesn't stop other apps' audio)
+  perl -0pi -e 's/(didFinishLaunchingWithOptions[^{]*\{\n)/$1        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, policy: .longFormAudio)\n/' "$DELEGATE"
 fi
 grep -q 'setCategory(.playback' "$DELEGATE" || { echo "patch-ios: could not add the audio session to AppDelegate.swift" >&2; exit 1; }
 

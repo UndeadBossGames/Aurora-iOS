@@ -7,6 +7,7 @@ import WebKit
 class AuroraViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(AuroraDLPlugin())
+        bridge?.registerPluginInstance(AuroraAudioPlugin())
     }
 
     override func viewDidLoad() {
