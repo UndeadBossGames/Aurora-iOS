@@ -406,6 +406,7 @@ def _track(job, info, path, kind):
         'path': _rel(path, job.root, 'docs'),
         'title': meta.get('title') or info.get('track') or info.get('title') or os.path.basename(path),
         'artist': meta.get('artist') or info.get('artist') or re.sub(r' - Topic$', '', info.get('uploader') or info.get('channel') or '') or 'Unknown artist',
+        'explicit': bool(meta.get('explicit')) or None,
         'album': meta.get('album') or info.get('album') or ('Spotify downloads' if job.source == 'Spotify' else (info.get('extractor_key') or 'Downloads')),
         'duration': float(info.get('duration') or 0),
         'kind': kind,
@@ -516,6 +517,20 @@ def _run(job):
                     entries.append({'url': u, 'title': e.get('title') or u, 'thumbnail': (e.get('thumbnails') or [{}])[-1].get('url')})
                 _emit(type='expand', jobId=job.id, title=flat.get('title') or 'Playlist', entries=entries)
                 return
+
+        # Spotify songs: the official release from YouTube Music, explicit version first
+        if job.source == 'Spotify' and job.url.startswith('ytsearch1:') and job.meta.get('title'):
+            try:
+                n = lambda x: re.sub(r'[^a-z0-9]+', '', re.sub(r'\s*[(\[][^)\]]*[)\]]', '', str(x or '').lower()))
+                t, a = job.meta.get('title'), job.meta.get('artist') or ''
+                hits = [h for h in _ytm_search(f'{a} {t}', 6) if n(t) in n(h['title']) or n(h['title']) in n(t)]
+                same = [h for h in hits if not a or n(a)[:6] in n(h['channel'])]
+                pick = next((h for h in same if h.get('explicit')), None) or (same[0] if same else None)
+                if pick:
+                    job.url = pick['url']
+                    job.meta = {**job.meta, 'album': job.meta.get('album') or pick.get('album'), 'explicit': pick.get('explicit') or None}
+            except Exception as e:
+                job.logger.warning(f'YouTube Music lookup failed: {_clean_error(e)}')
 
         ladder = CLIENT_LADDER if _is_youtube(job.url) else [None]
         last = None
@@ -657,7 +672,8 @@ def _ytm_item(it):
     thumbs = ((((it.get('thumbnail') or {}).get('musicThumbnailRenderer') or {}).get('thumbnail') or {}).get('thumbnails') or [])
     thumb = thumbs[-1]['url'] if thumbs else f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
     thumb = re.sub(r'=w\d+-h\d+', '=w544-h544', thumb)
-    return {'id': vid, 'url': f'https://www.youtube.com/watch?v={vid}', 'source': 'YouTube', 'kind': 'song',
+    explicit = any((((b.get('musicInlineBadgeRenderer') or {}).get('icon') or {}).get('iconType') == 'MUSIC_EXPLICIT_BADGE') for b in (it.get('badges') or []))
+    return {'id': vid, 'url': f'https://www.youtube.com/watch?v={vid}', 'source': 'YouTube', 'kind': 'song', 'explicit': explicit,
             'title': title, 'channel': ', '.join(artists), 'album': album, 'duration': float(dur), 'views': plays,
             'thumbnail': thumb, 'square': True, 'live': False}
 

@@ -54,12 +54,12 @@ const Artwork = (() => {
     const cands = [];
     try {
       const r = await getJson(`https://itunes.apple.com/search?media=music&entity=song&limit=8&term=${encodeURIComponent(q)}`);
-      for (const x of (r && r.results) || []) cands.push({ title: x.trackName, artist: x.artistName, album: x.collectionName, art: String(x.artworkUrl100 || '').replace(/100x100bb/, '1000x1000bb'), dur: (x.trackTimeMillis || 0) / 1000 });
+      for (const x of (r && r.results) || []) cands.push({ title: x.trackName, artist: x.artistName, album: x.collectionName, art: String(x.artworkUrl100 || '').replace(/100x100bb/, '1000x1000bb'), dur: (x.trackTimeMillis || 0) / 1000, explicit: x.trackExplicitness === 'explicit' });
     } catch {}
     if (!cands.length) {
       try {
         const r = await getJson(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=8`);
-        for (const x of (r && r.data) || []) cands.push({ title: x.title, artist: x.artist && x.artist.name, album: x.album && x.album.title, art: x.album && (x.album.cover_xl || x.album.cover_big), dur: x.duration || 0 });
+        for (const x of (r && r.data) || []) cands.push({ title: x.title, artist: x.artist && x.artist.name, album: x.album && x.album.title, art: x.album && (x.album.cover_xl || x.album.cover_big), dur: x.duration || 0, explicit: !!x.explicit_lyrics });
       } catch {}
     }
     let best = null, bestScore = 0;
@@ -153,6 +153,8 @@ const Artwork = (() => {
           if (channelish(t.artist) || /\s[-–—]\s/.test(t.title)) patch.artist = m.artist;
         }
         if (!t.album || /^(downloads|youtube|soundcloud|web|generic|spotify downloads)$/i.test(t.album)) patch.album = m.album;
+        // the explicit tag (an "E" next to the artist), when the store says so and the length matches
+        if (m.explicit && t.explicit === undefined && m.score >= 0.75 && (!t.duration || !m.dur || Math.abs(t.duration - m.dur) < 12)) patch.explicit = true;
       } else if (t.cover) {
         const img = await load(native.fileUrl(t.cover));
         const square = Math.abs(img.naturalWidth - img.naturalHeight) < 4;
