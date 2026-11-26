@@ -158,7 +158,9 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: JS API
 
     @objc func loadItem(_ call: CAPPluginCall) {
-        guard let item = Item(call.options as? [String: Any] ?? [:]) else { call.reject("Bad item"); return }
+        var opts: [String: Any] = [:]
+        for (k, v) in call.options ?? [:] { if let key = k as? String { opts[key] = v } }
+        guard let item = Item(opts) else { call.reject("Bad item"); return }
         let startAt = call.getDouble("startAt") ?? 0
         let play = call.getBool("play") ?? false
         DispatchQueue.main.async {
@@ -195,7 +197,7 @@ public class AuroraAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// The songs that come after the current one (already in play order, shuffle included).
     @objc func setQueue(_ call: CAPPluginCall) {
-        let raw = call.getArray("items", [String: Any].self) ?? []
+        let raw = (call.getArray("items") ?? []).compactMap { $0 as? [String: Any] }
         let items = raw.compactMap { Item($0) }
         let one = call.getBool("repeatOne") ?? false
         DispatchQueue.main.async {
